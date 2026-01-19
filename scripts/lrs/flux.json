@@ -14,7 +14,8 @@
         "huber_schedule": "snr",
         "lr_scheduler": "cosine",
         "discrete_flow_shift": 3.1582,
-        "gradient_accumulation_steps": 2
+        "gradient_accumulation_steps": 8,
+        "train_batch_size": 1
     },
     "data": {
         "00f8fa962a24d797b9a09be9886ec37bfaf613c98a420d303d220040f65b3eed": {

@@ -623,6 +623,7 @@ def ensure_offline_tokenizers():
                     shutil.copy2(os.path.join(qwen_root, "config.json"), os.path.join(transformer_dir, "config.json"))
                 
                 # Copy the model file
+                # Use COPY instead of MOVE to be safe if original is symlinked
                 shutil.copy2(os.path.join(qwen_root, found_model), os.path.join(transformer_dir, "diffusion_pytorch_model.bin"))
                 print("✅ [OFFLINE FIX] Qwen structure corrected.", flush=True)
             except Exception as e:

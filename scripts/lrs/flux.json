@@ -5,7 +5,7 @@
             0.000005,
             0.000005
         ],
-        "optimizer_type": "Lion",
+        "optimizer_type": "adamw8bit",
         "optimizer_args": [
             "weight_decay=0.01",
             "betas=(0.9,0.99)"
@@ -20,58 +20,60 @@
         "00f8fa962a24d797b9a09be9886ec37bfaf613c98a420d303d220040f65b3eed": {
             "model_name": "dataautogpt3/FLUX-MonochromeManga",
             "small": {
-                "max_train_epochs": 90,
+                "max_train_epochs": 220,
                 "unet_lr": 0.00007
             },
             "medium": {
-                "max_train_epochs": 40,
-                "unet_lr": 0.00005
+                "max_train_epochs": 240,
+                "unet_lr": 0.00002
             },
             "large": {
-                "max_train_epochs": 20,
-                "unet_lr": 0.00003
+                "max_train_epochs": 180,
+                "unet_lr": 0.000015
             }
         },
         "47173b2141dd5aa99d2c1de9208b092e81905789d238a29d092f007e75726ce3": {
             "model_name": "mikeyandfriends/PixelWave_FLUX.1-dev_03",
             "small": {
-                "max_train_epochs": 90,
+                "max_train_epochs": 220,
                 "unet_lr": 0.00007
             },
             "medium": {
-                "max_train_epochs": 40,
-                "unet_lr": 0.00005
+                "max_train_epochs": 240,
+                "unet_lr": 0.00002
             },
             "large": {
-                "max_train_epochs": 20,
-                "unet_lr": 0.00003
+                "max_train_epochs": 180,
+                "unet_lr": 0.000015
             }
         },
         "a6d3e66c487e7e7fa7ce6b5b1753a39efe2c0d2eca5a9e4752703227dd408b69": {
             "model_name": "rayonlabs/FLUX.1-dev",
             "small": {
-                "max_train_epochs": 90
+                "max_train_epochs": 220
             },
             "medium": {
-                "max_train_epochs": 40
+                "max_train_epochs": 240,
+                "unet_lr": 0.00002
             },
             "large": {
-                "max_train_epochs": 20
+                "max_train_epochs": 180,
+                "unet_lr": 0.000015
             }
         },
         "6445f395eb2cbcb40cec7bda29dd19c6ee0beb4660ee5fbc2556ed35920cd6b2": {
             "model_name": "mhnakif/fluxunchained-dev",
             "small": {
-                "max_train_epochs": 90,
+                "max_train_epochs": 220,
                 "unet_lr": 0.00007
             },
             "medium": {
-                "max_train_epochs": 40,
-                "unet_lr": 0.00005
+                "max_train_epochs": 240,
+                "unet_lr": 0.00002
             },
             "large": {
-                "max_train_epochs": 20,
-                "unet_lr": 0.00003,
+                "max_train_epochs": 180,
+                "unet_lr": 0.000015,
                 "network_dim": 32,
                 "network_alpha": 16
             }

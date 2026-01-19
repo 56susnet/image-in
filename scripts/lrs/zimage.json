@@ -1,0 +1,26 @@
+﻿{
+    "default": {
+        "unet_lr": 0.0001,
+        "text_encoder_lr": 0.00001,
+        "optimizer_type": "adamw8bit",
+        "network_dim": 64,
+        "network_alpha": 32
+    },
+    "data": {
+        "3a5e401ab45c3f7e89739c5b204709d0a1418a5cff5888ce6ec97e7abe09ce0a": {
+            "model_name": "zimage_turbo",
+            "small": {
+                "max_train_epochs": 140,
+                "unet_lr": 0.00015
+            },
+            "medium": {
+                "max_train_epochs": 75,
+                "unet_lr": 0.0001
+            },
+            "large": {
+                "max_train_epochs": 40,
+                "unet_lr": 0.00008
+            }
+        }
+    }
+}

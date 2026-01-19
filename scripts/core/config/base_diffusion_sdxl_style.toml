@@ -1,0 +1,52 @@
+# PROOF OF EMPIRE BASE (SDXL STYLE) - FLAT VERSION (G.O.D ALIGNMENT)
+no_metadata = true
+async_upload = true
+bucket_no_upscale = true
+bucket_reso_steps = 64
+cache_latents = true
+cache_latents_to_disk = true
+caption_extension = ".txt"
+dynamo_backend = "no"
+enable_bucket = true
+gradient_checkpointing = true
+huber_c = 0.1
+huber_schedule = "snr"
+
+pretrained_model_name_or_path = "/cache/models"
+v_parameterization = false
+
+no_half_vae = true
+network_module = "networks.lora"
+network_dim = 32
+network_alpha = 32
+
+optimizer_type = "adamw8bit"
+learning_rate = 4e-5
+text_encoder_lr = 4e-6
+max_grad_norm = 1.0
+optimizer_args = [ "weight_decay=0.01", "betas=(0.9, 0.999)", "eps=1e-08" ]
+lr_scheduler = "cosine"
+lr_warmup_steps = 25
+min_snr_gamma = 8
+
+debug_dataset = false
+
+mixed_precision = "bf16"
+save_precision = "bf16"
+output_dir = "/app/checkpoints"
+output_name = "last"
+save_model_as = "safetensors"
+max_data_loader_n_workers = 2
+gradient_accumulation_steps = 1
+train_batch_size = 4
+loss_type = "l2"
+xformers = true
+max_token_length = 125
+max_train_epochs = 20
+save_every_n_epochs = 10
+
+steps = 20
+guidance_scale = 8.0
+denoise = 0.9
+resolution = "1024,1024"
+seed = 42

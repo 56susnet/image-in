@@ -1,0 +1,39 @@
+﻿{
+    "default": {
+        "unet_lr": 0.0001,
+        "optimizer_type": "adamw8bit",
+        "weight_decay": 0.01
+    },
+    "data": {
+        "65f7526e4b4dfff9cfd1a961f40e75649d34f085c246d35d0e025bb235bc635d": {
+            "model_name": "gradients-io-tournaments/Qwen-Image",
+            "small": {
+                "max_train_epochs": 200,
+                "unet_lr": 0.0002
+            },
+            "medium": {
+                "max_train_epochs": 100,
+                "unet_lr": 0.0001
+            },
+            "large": {
+                "max_train_epochs": 50,
+                "unet_lr": 0.00005
+            }
+        },
+        "f5eea20a2dbc9e3de97243d3ff8935c349fbb4637e4378e43ed2f57ba379cbb7": {
+            "model_name": "gradients-io-tournaments/Qwen-Image-Jib-Mix",
+            "small": {
+                "max_train_epochs": 200,
+                "unet_lr": 0.0002
+            },
+            "medium": {
+                "max_train_epochs": 100,
+                "unet_lr": 0.0001
+            },
+            "large": {
+                "max_train_epochs": 50,
+                "unet_lr": 0.00005
+            }
+        }
+    }
+}

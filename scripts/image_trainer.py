@@ -534,6 +534,8 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     config[key] = value
                     
                     # COHERENCE: If we set max_train_epochs, clear max_train_steps to avoid conflicts
+                    if key == "max_train_epochs":
+                        if "max_train_steps" in config:
                             print(f"   [COHERENCE] Clearing max_train_steps to prioritize epoch scaling ({value} epochs)", flush=True)
                             del config["max_train_steps"]
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Jordansky
+# Reverse Config (Jordansky)
 """
 
 import argparse
@@ -74,7 +74,7 @@ def count_images_in_directory(directory_path: str) -> int:
 
 def load_size_based_config(model_type: str, is_style: bool, dataset_size: int) -> dict:
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_dir = os.path.join(script_dir, "autoepoch") # Point to autoepoch dir
+    config_dir = os.path.join(script_dir, "autoepoch") 
     
     if model_type == "flux":
         config_file = os.path.join(config_dir, "a-epochflux.json")
@@ -138,7 +138,7 @@ def get_config_for_model(lrs_config: dict, model_name: str, dataset_size: int = 
             # Check if model_config has size-specific settings
             if size_category in model_config:
                 size_specific_config = model_config.get(size_category, {})
-                # Merge: default → model_config (non-size keys) → size_specific
+                # Merge Config
                 base_model_config = {k: v for k, v in model_config.items() if k not in ["small", "medium", "large"]}
                 merged = merge_model_config(default_config, base_model_config)
                 return merge_model_config(merged, size_specific_config)
@@ -186,7 +186,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         f"base_diffusion_{model_type}_{task_type}.yaml",
         f"base_diffusion_{model_type}.toml",
         f"base_diffusion_{model_type}.yaml",
-        f"base_{model_type}.yaml" # Legacy fallback
+        f"base_{model_type}.yaml" 
     ]
     
     config_template_path = None
@@ -199,7 +199,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     if not config_template_path:
         raise FileNotFoundError(f"Could not find a valid config template for {model_type} in {config_dir}")
 
-    # --- LAYER 2: DICTIONARY & MAPPING (CHAMPION LOGIC) ---
+    # --- LAYER 2: DICTIONARY & MAPPING 
     network_config_person = {
         "stabilityai/stable-diffusion-xl-base-1.0": 235,
         "Lykon/dreamshaper-xl-1-0": 235,
@@ -297,7 +297,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         999: {"network_dim": 32, "network_alpha": 32, "network_args": ["conv_dim=32", "conv_alpha=32"]}
     }
 
-    # Determine Model Config ID
+    # Model Config ID
     if model_type == "z-image":
         config_id = 999
     elif model_type == "flux":
@@ -381,7 +381,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     if dataset_size == 0: return epochs
                     return int(epochs * (dataset_size / batch_size))
 
-                # 1. Apply Autoepoch (Size-based defaults)
+                # 1. APPLY AE (SIZE-BASED DEFAULTS)
                 if size_config:
                     for key, value in size_config.items():
                         if key == "max_train_epochs": process['train']['steps'] = calculate_steps(value)
@@ -392,7 +392,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                             process[block][key if block == 'adapter' else ('linear' if key == 'rank' else 'linear_alpha')] = value
                         else: process['train'][key] = value
 
-                # 2. Apply LRS Override (Task-specific precision)
+                # 2. APPLY LRS OVERRIDES
                 if lrs_settings:
                     for key, value in lrs_settings.items():
                         if key in ["unet_lr", "text_encoder_lr", "learning_rate"]: process['train']['lr'] = value
@@ -426,30 +426,29 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
 
         config['pretrained_model_name_or_path'] = model_path
         
-        # FLUX Component Auto-Pathing (G.O.D ALIGNMENT)
+        # FLUX Component 
         if model_type == "flux":
             print("\n[FLUX GOD MODE] Starting precision asset fingerprinting...", flush=True)
             
-            # 1. HARD-PRIORITY: Standard Validator/GOD Paths
-            # Alignment: G.O.D often places them in /cache/models or /app/flux
+            # 1. HARD-PRIORITY: Standard Validator
             std_paths = {
                 'ae': "/cache/models/ae.safetensors",
                 'clip_l': "/cache/models/clip_l.safetensors",
                 't5xxl': "/cache/models/t5xxl.safetensors"
             }
             
-            # G.O.D Template compatibility: Ensure keys exist at top level or in model_arguments
+            # Template compatibility
             def set_flux_arg(k, v):
-                config[k] = v # GOD style (Flat)
+                config[k] = v
                 if 'model_arguments' not in config: config['model_arguments'] = {}
-                config['model_arguments'][k] = v # Legacy style
+                config['model_arguments'][k] = v
 
             for key, path in std_paths.items():
                 if os.path.exists(path):
                     set_flux_arg(key, path)
                     print(f"   [VALIDATOR] Found {key} at {path}", flush=True)
 
-            # 2. FALLBACK/DISCOVERY: If any components are still missing or invalid
+            # 2. FALLBACK/DISCOVERY
             missing = [k for k in ['ae', 'clip_l', 't5xxl'] if not os.path.exists(config.get(k, ""))]
             if missing:
                 search_bases = ["/cache/models", "/app/models", "/app/flux", "/workspace/models", os.path.dirname(model_path)]
@@ -489,7 +488,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     path = find_surgical("T5", 4.3, 11.0, avoid=["part", "of-", "shard"])
                     if path: set_flux_arg('t5xxl', path)
 
-            # 3. CRITICAL COHERENCE CHECK
+            # 3. CRITICAL COHERENCE
             final_ae = config.get('ae')
             final_clip = config.get('clip_l')
             final_t5 = config.get('t5xxl')
@@ -506,7 +505,6 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         config['output_dir'] = output_dir
 
         # Apply Overrides (Priority: Autoepoch < LRS)
-        # We now use FLAT injection for everything to ensure reliable overwriting
         section_map = {}
         
         # FLUX Specific Direct Overrides (G.O.D Style - All Flat)
@@ -530,7 +528,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                         if sec not in config: config[sec] = {}
                         config[sec][target] = value
                     else:
-                        config[target] = value # Flat injection
+                        config[target] = value
                 else:
                     # Direct injection for root keys (max_train_epochs, train_batch_size, etc.)
                     config[key] = value
@@ -625,14 +623,12 @@ def ensure_offline_tokenizers():
                     shutil.copy2(os.path.join(qwen_root, "config.json"), os.path.join(transformer_dir, "config.json"))
                 
                 # Copy the model file
-                # Use COPY instead of MOVE to be safe if original is symlinked
                 shutil.copy2(os.path.join(qwen_root, found_model), os.path.join(transformer_dir, "diffusion_pytorch_model.bin"))
                 print("✅ [OFFLINE FIX] Qwen structure corrected.", flush=True)
             except Exception as e:
                  print(f"⚠️ [OFFLINE FIX] Failed to restructure Qwen: {e}", flush=True)
 
 def run_training(model_type, config_path):
-    # Ensure tokenizers are ready for offline sd-scripts
     # Ensure tokenizers are ready for offline sd-scripts
     if model_type in ["sdxl", "flux", "z-image", "qwen-image"]:
         ensure_offline_tokenizers()
@@ -647,7 +643,7 @@ def run_training(model_type, config_path):
             "/app/ai-toolkit/run.py",
             config_path
         ]
-        # AI-Toolkit Offline Guard
+        # AI-TOOLKIT 
         env = os.environ.copy()
         env["HF_DATASETS_OFFLINE"] = "1"
         env["TRANSFORMERS_OFFLINE"] = "1"
@@ -747,7 +743,7 @@ async def main():
     print("🚀 EMPIRE STANDALONE TRAINER V2.0 (OFFLINE PATCHED)", flush=True)
     print("--------------------------------------------------", flush=True)
     print("---STARTING IMAGE TRAINING SCRIPT---", flush=True)
-    # Parse command line arguments
+    # PARSE COMMAND LINE ARGUMENTS
     parser = argparse.ArgumentParser(description="Image Model Training Script")
     parser.add_argument("--task-id", required=True, help="Task ID")
     parser.add_argument("--model", required=True, help="Model name or path")

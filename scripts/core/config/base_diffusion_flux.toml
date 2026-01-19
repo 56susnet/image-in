@@ -1,5 +1,5 @@
 # PROOF OF EMPIRE BASE (FLUX)
-# Reverse Config (Jordansky) - Final Coherence Lock
+# Reverse Config (Jordansky)
 
 no_metadata = true
 ae = "/app/flux/ae.safetensors"

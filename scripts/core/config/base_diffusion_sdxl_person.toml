@@ -1,4 +1,6 @@
-# PROOF OF EMPIRE BASE (SDXL PERSON) - FLAT VERSION (G.O.D ALIGNMENT)
+# PROOF OF EMPIRE BASE (SDXL PERSON)
+# Reverse Config (Jordansky)
+
 no_metadata = true
 async_upload = true
 bucket_no_upscale = true

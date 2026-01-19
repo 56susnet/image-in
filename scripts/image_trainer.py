@@ -534,22 +534,20 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     config[key] = value
                     
                     # COHERENCE: If we set max_train_epochs, clear max_train_steps to avoid conflicts
-                    if key == "max_train_epochs":
-                        if "max_train_steps" in config:
                             print(f"   [COHERENCE] Clearing max_train_steps to prioritize epoch scaling ({value} epochs)", flush=True)
                             del config["max_train_steps"]
 
-                    # JORDANSKY OPTIMIZATION: Auto-disable TE training if LR is 0.0 (Fixes 25s/it issue)
-                    if key == "text_encoder_lr":
-                        is_zero = False
-                        if isinstance(value, list) and all(float(v) == 0.0 for v in value): is_zero = True
-                        elif isinstance(value, (int, float)) and float(value) == 0.0: is_zero = True
-                        
-                        if is_zero:
-                            print(f"   [SPEED BOOST] Text Encoder LR is 0.0 -> Enabling 'network_train_unet_only' and removing TE LR", flush=True)
-                            config["network_train_unet_only"] = True
-                            if "text_encoder_lr" in config: del config["text_encoder_lr"] 
-                            continue # Skip adding the zero LR to config
+        # JORDANSKY FINAL VALIDATION: Auto-disable TE training if LR is 0.0 (Global Check)
+        if "text_encoder_lr" in config:
+            val = config["text_encoder_lr"]
+            is_zero = False
+            if isinstance(val, list) and all(float(v) == 0.0 for v in val): is_zero = True
+            elif isinstance(val, (int, float)) and float(val) == 0.0: is_zero = True
+            
+            if is_zero:
+                print(f"   [SPEED BOOST] Detected 0.0 LR for Text Encoder -> Forcing 'network_train_unet_only' = True", flush=True)
+                config["network_train_unet_only"] = True
+                del config["text_encoder_lr"]
 
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)

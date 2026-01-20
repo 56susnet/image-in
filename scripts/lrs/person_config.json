@@ -348,18 +348,19 @@
     },
     "7637327a8414801bf0bb4d6d1b574dd95c05525165ee271cc085b64f89c8cba8": {
       "model_name": "ehristoforu/Visionix-alpha",
-      "prior_loss_weight": 0.8,
-      "train_batch_size": 4,
+      "prior_loss_weight": 0.7,
+      "train_batch_size": 6,
       "optimizer_args": [
         "decouple=True",
         "d_coef=1",
-        "weight_decay=0.01",
+        "weight_decay=0.005",
         "use_bias_correction=True",
         "safeguard_warmup=True"
       ],
-      "min_snr_gamma": 5,
+      "min_snr_gamma": 6,
       "small": {
-        "max_train_epochs": 100
+        "max_train_epochs": 5,
+        "save_every_n_epochs": 2
       },
       "medium": {
         "max_train_epochs": 80

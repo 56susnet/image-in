@@ -777,6 +777,48 @@ def run_training(model_type, config_path):
                     print(f"[FIX] Successfully moved to {intended_output_dir}/last.safetensors", flush=True)
         except Exception as e:
             print(f"[FIX] Error moving checkpoint: {e}", flush=True)
+        
+        # --- UNIVERSAL VALIDATOR COMPATIBILITY PATCH (POST-TRAINING) ---
+        try:
+            import json, re, toml
+            # 1. Get output_dir from config
+            with open(config_path, "r") as f:
+                config_data = toml.load(f) if config_path.endswith(".toml") else yaml.safe_load(f)
+            
+            output_dir = config_data.get("output_dir")
+            model_name = config_data.get("pretrained_model_name_or_path") or "model"
+            
+            if output_dir and os.path.exists(output_dir):
+                # A. Ensure Metadata Exists
+                adapter_path = os.path.join(output_dir, "adapter_config.json")
+                if not os.path.exists(adapter_path):
+                    with open(adapter_path, "w") as f:
+                        json.dump({
+                            "base_model_name_or_path": model_name,
+                            "peft_type": "LORA",
+                            "task_type": "CAUSAL_LM" if "flux" in model_type or "qwen" in model_type else None
+                        }, f, indent=2)
+                    print(f"[POST-PATCH] Generated missing adapter_config.json", flush=True)
+
+                readme_path = os.path.join(output_dir, "README.md")
+                if not os.path.exists(readme_path):
+                    with open(readme_path, "w") as f:
+                        f.write(f"---\nbase_model: {model_name}\ntags:\n- lora\n- {model_type}\n---\n# Output\nModel: {model_name}")
+                    print(f"[POST-PATCH] Generated missing README.md", flush=True)
+
+                # B. Aggressive Cleanup: Keep ONLY 'last.safetensors'
+                checkpoint_pattern = re.compile(r".*-\d{4,}.*\.safetensors$")
+                for f in os.listdir(output_dir):
+                    file_path = os.path.join(output_dir, f)
+                    if f.endswith(".safetensors"):
+                        if f == "last.safetensors": continue
+                        if checkpoint_pattern.match(f) or ("-" in f and any(char.isdigit() for char in f)):
+                            try:
+                                os.remove(file_path)
+                                print(f"[POST-PATCH] Cleaned up intermediate: {f}", flush=True)
+                            except: pass
+        except Exception as e:
+            print(f"[POST-PATCH] Error during cleanup: {e}", flush=True)
         # ------------------------------------------------
 
     except subprocess.CalledProcessError as e:

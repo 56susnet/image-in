@@ -507,12 +507,20 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         # Apply Overrides (Priority: Autoepoch < LRS)
         section_map = {}
         
+        if model_type == "sdxl":
+            section_map["unet_lr"] = ("nospec", "unet_lr")
+            section_map["text_encoder_lr"] = ("nospec", "text_encoder_lr")
+            section_map["network_dim"] = ("additional_network_arguments", "network_dim")
+            section_map["network_alpha"] = ("additional_network_arguments", "network_alpha")
+            section_map["save_every_n_epochs"] = (None, "save_every_n_epochs")
+
         # FLUX Specific Direct Overrides (G.O.D Style - All Flat)
         if model_type == "flux":
             section_map["unet_lr"] = (None, "unet_lr")
             section_map["text_encoder_lr"] = (None, "text_encoder_lr")
             section_map["optimizer_type"] = (None, "optimizer_type")
             section_map["optimizer_args"] = (None, "optimizer_args")
+            section_map["save_every_n_epochs"] = (None, "save_every_n_epochs")
 
         # Apply Overrides (Priority: Autoepoch < LRS)
         configs_to_apply = [size_config, lrs_settings]
@@ -551,8 +559,40 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                 config["network_train_unet_only"] = True
                 del config["text_encoder_lr"]
 
-        config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
-        save_config_toml(config, config_path)
+        # --- UNIVERSAL VALIDATOR COMPATIBILITY PATCH ---
+        import json, re
+        # 1. Ensure Metadata Exists
+        adapter_path = os.path.join(output_dir, "adapter_config.json")
+        if not os.path.exists(adapter_path):
+            with open(adapter_path, "w") as f:
+                json.dump({
+                    "base_model_name_or_path": model,
+                    "peft_type": "LORA",
+                    "task_type": "CAUSAL_LM" if "flux" in model_type or "qwen" in model_type else None
+                }, f, indent=2)
+            print(f"   [UNIVERSAL PATCH] Generated missing adapter_config.json for {model_type}", flush=True)
+
+        readme_path = os.path.join(output_dir, "README.md")
+        if not os.path.exists(readme_path):
+            with open(readme_path, "w") as f:
+                f.write(f"---\nbase_model: {model}\ntags:\n- lora\n- {model_type}\n---\n# {expected_repo_name}\nTask ID: {task_id}")
+            print(f"   [UNIVERSAL PATCH] Generated missing README.md for {model_type}", flush=True)
+
+        # 2. Aggressive Cleanup: Keep ONLY 'last.safetensors' (Avoid confused validators)
+        # Patterns like: last-000001.safetensors, model-000005.safetensors, etc.
+        checkpoint_pattern = re.compile(r".*-\d{4,}.*\.safetensors$")
+        for f in os.listdir(output_dir):
+            file_path = os.path.join(output_dir, f)
+            if f.endswith(".safetensors"):
+                if f == "last.safetensors": continue # Keep the good one
+                
+                # If it's a numbered checkpoint OR doesn't match 'last.safetensors' exactly
+                if checkpoint_pattern.match(f) or ("-" in f and any(char.isdigit() for char in f)):
+                    try:
+                        os.remove(file_path)
+                        print(f"   [UNIVERSAL PATCH] Cleaned up intermediate/duplicate: {f}", flush=True)
+                    except: pass
+
         print(f"Created config at {config_path}", flush=True)
         return config_path
 

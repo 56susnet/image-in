@@ -125,7 +125,7 @@ def main():
                     shutil.move(src_path, dst_path)
                     print(f"Moved {file} to root of upload folder", flush=True)
 
-    print(f"Uploading contents of {local_folder} to {repo_id} (ROOT)", flush=True)
+    print(f"Uploading contents of {local_folder} to {repo_id}", flush=True)
 
     # Force upload to ROOT (ignore subfolder env var)
     api.upload_folder(

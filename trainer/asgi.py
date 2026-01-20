@@ -1,14 +1,15 @@
 import uvicorn
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+    load_dotenv(".trainer.env")
+except ImportError:
+    pass
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 from trainer.endpoints import factory_router
 from trainer.utils.cleanup_loop import start_cleanup_loop_in_thread
 from validator.utils.logging import get_logger
-
-
-load_dotenv(".trainer.env")
 
 logger = get_logger(__name__)
 

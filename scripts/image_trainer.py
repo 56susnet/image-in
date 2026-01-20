@@ -15,6 +15,7 @@ import re
 import time
 import yaml
 import toml
+import signal
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
@@ -498,11 +499,11 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)
         print(f"Created config at {config_path}", flush=True)
-        return config_path, output_dir
+        return config_path, output_dir, dataset_size
 
 
 
-def run_training(model_type, config_path, output_dir):
+def run_training(model_type, config_path, output_dir, dataset_size):
     print(f"Starting training with config: {config_path}", flush=True)
 
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
@@ -538,14 +539,75 @@ def run_training(model_type, config_path, output_dir):
             env=env
         )
 
+        # JAE (Jordansky Adaptive Engine) - Monitor Setup
+        if dataset_size <= 20: 
+            stop_threshold = 0.0005
+            size_label = "SMALL"
+        elif dataset_size <= 40: 
+            stop_threshold = 0.0003
+            size_label = "MEDIUM"
+        else: 
+            stop_threshold = 0.0002
+            size_label = "LARGE"
+
+        print(f"[JAE] Monitoring Active. Dataset: {size_label}, Threshold: {stop_threshold}", flush=True)
+
+        loss_history = []
+        epoch_avg_losses = []
+        current_epoch_losses = []
+        last_epoch_avg = None
+        stop_triggered = False
+
         for line in process.stdout:
             print(line, end="", flush=True)
+            
+            # --- PARSE LOSS & PROGRESS ---
+            # Pattern Kohya: steps:  10%|█         | 5/50 [00:20<03:00,  4.10s/it, avr_loss=0.0952]
+            # Pattern AI-Toolkit: Step 5/50: Loss: 0.0952
+            current_loss = None
+            if "avr_loss=" in line:
+                try:
+                    loss_str = line.split("avr_loss=")[-1].split("]")[0].strip()
+                    current_loss = float(loss_str)
+                except: pass
+            elif "Loss:" in line:
+                try:
+                    loss_str = line.split("Loss:")[-1].strip().split(" ")[0].strip()
+                    current_loss = float(loss_str)
+                except: pass
+
+            if current_loss is not None:
+                try:
+                    current_epoch_losses.append(current_loss)
+                    
+                    # Detect Epoch End (Every time the list reaches equivalent steps per epoch)
+                    # We'll use a simpler heuristic: check every once in a while
+                    steps_per_epoch = max(5, int(dataset_size * 5 / 4))
+                    if len(current_epoch_losses) >= steps_per_epoch:
+                        avg_loss = sum(current_epoch_losses) / len(current_epoch_losses)
+                        
+                        if last_epoch_avg is not None:
+                            delta = last_epoch_avg - avg_loss
+                            if delta < stop_threshold:
+                                print(f"\n[JAE SIGNAL] Convergence/Overfit Detected! Delta {delta:.5f} < Threshold {stop_threshold}", flush=True)
+                                print(f"[JAE SIGNAL] Requesting graceful save and exit...", flush=True)
+                                stop_triggered = True
+                                process.send_signal(signal.SIGINT) # Trigger internal save handler
+                                break
+                        
+                        last_epoch_avg = avg_loss
+                        current_epoch_losses = [] # Reset for next window
+                except:
+                    pass
 
         return_code = process.wait()
-        if return_code != 0:
+        if return_code != 0 and not stop_triggered:
             raise subprocess.CalledProcessError(return_code, training_command)
 
-        print("Training subprocess completed successfully.", flush=True)
+        if stop_triggered:
+            print("[JAE] Training gracefully halted by Early Stopping.", flush=True)
+        else:
+            print("Training subprocess completed successfully.", flush=True)
 
     except subprocess.CalledProcessError as e:
         print("Training subprocess failed!", flush=True)
@@ -603,7 +665,7 @@ async def main():
         output_dir=train_cst.IMAGE_CONTAINER_IMAGES_PATH
     )
 
-    config_path, output_dir = create_config(
+    config_path, output_dir, dataset_size = create_config(
         args.task_id,
         model_path,
         args.model,
@@ -612,7 +674,7 @@ async def main():
         args.trigger_word,
     )
 
-    run_training(args.model_type, config_path, output_dir)
+    run_training(args.model_type, config_path, output_dir, dataset_size)
 
 
 if __name__ == "__main__":

@@ -9,24 +9,24 @@
             "min": 1,
             "max": 20,
             "config": {
-                "max_train_epochs": 115,
-                "save_every_n_epochs": 55
+                "max_train_epochs": 60,
+                "save_every_n_epochs": 20
             }
         },
         {
             "min": 21,
             "max": 40,
             "config": {
-                "max_train_epochs": 120,
-                "save_every_n_epochs": 40
+                "max_train_epochs": 45,
+                "save_every_n_epochs": 20
             }
         },
         {
             "min": 41,
             "max": 60,
             "config": {
-                "max_train_epochs": 90,
-                "save_every_n_epochs": 30
+                "max_train_epochs": 35,
+                "save_every_n_epochs": 20
             }
         }
     ]

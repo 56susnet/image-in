@@ -806,29 +806,34 @@ def run_training(model_type, config_path):
                         f.write(f"---\nbase_model: {model_name}\ntags:\n- lora\n- {model_type}\n---\n# Output\nModel: {model_name}")
                     print(f"[POST-PATCH] Generated missing README.md", flush=True)
 
-                # B. Aggressive Cleanup & Surgical Rename
+                # B. Aggressive Cleanup & Surgical Rename (V2 - Clean Naming)
                 checkpoint_pattern = re.compile(r".*-\d{4,}.*\.safetensors$")
-                model_nick = model_name.split("/")[-1] if "/" in model_name else model_name
+                
+                # Clean up model name: /cache/models/ehristoforu--Visionix-alpha -> Visionix-alpha
+                model_name_raw = config_data.get("pretrained_model_name_or_path") or "model"
+                model_nick = model_name_raw.split("/")[-1].split("--")[-1]
                 target_filename = f"{model_nick}.safetensors"
+                
+                print(f"[POST-PATCH] Target filename for validator: {target_filename}", flush=True)
                 
                 for f in os.listdir(output_dir):
                     file_path = os.path.join(output_dir, f)
                     if f.endswith(".safetensors"):
-                        if f == "last.safetensors":
-                            # Rename 'last.safetensors' to match validator expectations
+                        if f == "last.safetensors" or f == "last":
+                            # Rename to match validator expectations
                             new_path = os.path.join(output_dir, target_filename)
                             if file_path != new_path:
                                 import shutil
-                                shutil.copy2(file_path, new_path) # Copy instead of move for safety
-                                os.remove(file_path) # Then remove last
-                                print(f"[POST-PATCH] Renamed last.safetensors to {target_filename}", flush=True)
+                                shutil.copy2(file_path, new_path)
+                                os.remove(file_path)
+                                print(f"[POST-PATCH] Renamed to {target_filename} (Validator Match)", flush=True)
                             continue
                         
-                        # Cleanup intermediate ones
-                        if checkpoint_pattern.match(f) or ("-" in f and any(char.isdigit() for char in f)):
+                        # Cleanup any other safetensors that aren't our target
+                        if f != target_filename:
                             try:
                                 os.remove(file_path)
-                                print(f"[POST-PATCH] Cleaned up intermediate: {f}", flush=True)
+                                print(f"[POST-PATCH] Cleaned up: {f}", flush=True)
                             except: pass
         except Exception as e:
             print(f"[POST-PATCH] Error during cleanup/rename: {e}", flush=True)

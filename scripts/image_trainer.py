@@ -523,7 +523,7 @@ def run_training(model_type, config_path, output_dir):
             "--num_processes", "1",
             "--num_machines", "1",
             "--num_cpu_threads_per_process", "2",
-            f"/app/sd-scripts/{model_type}_train_network.py",
+            f"/app/sd-script/{model_type}_train_network.py",
             "--config_file", config_path
         ]
 

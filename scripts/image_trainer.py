@@ -566,7 +566,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         if not os.path.exists(adapter_path):
             with open(adapter_path, "w") as f:
                 json.dump({
-                    "base_model_name_or_path": model,
+                    "base_model_name_or_path": model_name,
                     "peft_type": "LORA",
                     "task_type": "CAUSAL_LM" if "flux" in model_type or "qwen" in model_type else None
                 }, f, indent=2)
@@ -575,7 +575,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         readme_path = os.path.join(output_dir, "README.md")
         if not os.path.exists(readme_path):
             with open(readme_path, "w") as f:
-                f.write(f"---\nbase_model: {model}\ntags:\n- lora\n- {model_type}\n---\n# {expected_repo_name}\nTask ID: {task_id}")
+                f.write(f"---\nbase_model: {model_name}\ntags:\n- lora\n- {model_type}\n---\n# {expected_repo_name}\nTask ID: {task_id}")
             print(f"   [UNIVERSAL PATCH] Generated missing README.md for {model_type}", flush=True)
 
         # 2. Aggressive Cleanup: Keep ONLY 'last.safetensors' (Avoid confused validators)

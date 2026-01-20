@@ -806,19 +806,20 @@ def run_training(model_type, config_path):
                         f.write(f"---\nbase_model: {model_name}\ntags:\n- lora\n- {model_type}\n---\n# Output\nModel: {model_name}")
                     print(f"[POST-PATCH] Generated missing README.md", flush=True)
 
-                # B. Aggressive Cleanup: Keep ONLY 'last.safetensors'
-                checkpoint_pattern = re.compile(r".*-\d{4,}.*\.safetensors$")
-                for f in os.listdir(output_dir):
-                    file_path = os.path.join(output_dir, f)
-                    if f.endswith(".safetensors"):
-                        if f == "last.safetensors": continue
-                        if checkpoint_pattern.match(f) or ("-" in f and any(char.isdigit() for char in f)):
-                            try:
-                                os.remove(file_path)
-                                print(f"[POST-PATCH] Cleaned up intermediate: {f}", flush=True)
-                            except: pass
+                # C. Surgical Rename: Ensure filename matches validator expectations
+                # G.O.D validator often looks for [RepoPart].safetensors
+                model_nick = model_name.split("/")[-1] if "/" in model_name else model_name
+                target_filename = f"{model_nick}.safetensors"
+                last_path = os.path.join(output_dir, "last.safetensors")
+                
+                if os.path.exists(last_path):
+                    new_path = os.path.join(output_dir, target_filename)
+                    if last_path != new_path:
+                        import shutil
+                        shutil.move(last_path, new_path)
+                        print(f"[POST-PATCH] Renamed last.safetensors to {target_filename} for validator compatibility", flush=True)
         except Exception as e:
-            print(f"[POST-PATCH] Error during cleanup: {e}", flush=True)
+            print(f"[POST-PATCH] Error during cleanup/rename: {e}", flush=True)
         # ------------------------------------------------
 
     except subprocess.CalledProcessError as e:

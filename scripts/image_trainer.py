@@ -559,6 +559,9 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                 config["network_train_unet_only"] = True
                 del config["text_encoder_lr"]
 
+        config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
+        save_config_toml(config, config_path)
+
         # --- UNIVERSAL VALIDATOR COMPATIBILITY PATCH ---
         import json, re
         # 1. Ensure Metadata Exists

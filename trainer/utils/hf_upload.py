@@ -131,10 +131,11 @@ def main():
     api = HfApi()
     api.create_repo(repo_id=repo_id, token=hf_token, exist_ok=True, private=False)
 
-    print(f"Uploading contents of {local_folder} to {repo_id}", flush=True)
+    print(f"Uploading contents of {local_folder} to {repo_id} (Folder: {repo_subfolder or 'root'})", flush=True)
     api.upload_folder(
         repo_id=repo_id,
         folder_path=local_folder,
+        path_in_repo=repo_subfolder,
         commit_message=f"Upload task output {task_id}",
         token=hf_token,
     )

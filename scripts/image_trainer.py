@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-# Reverse Config (Jordansky)
+# VOOR (Jordansky)
 """
 
 import argparse
@@ -141,9 +141,9 @@ def load_size_based_config(model_type: str, is_style: bool, dataset_size: int) -
 
 
 def get_dataset_size_category(dataset_size: int) -> str:
-    if dataset_size <= 15:
+    if dataset_size <= 20:
         return "small"
-    elif dataset_size <= 35:
+    elif dataset_size <= 40:
         return "medium"
     else:
         return "large"
@@ -296,7 +296,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     model_params = config_mapping.get(config_id, config_mapping[235])
     net_dim = model_params["network_dim"]
 
-    print(f"[JORDANSKY - LAYER 2] Model '{model_name}' Rank {net_dim}", flush=True)
+    print(f"[CONFIG SPESIFICATION - LAYER II] Model '{model_name}' Rank {net_dim}", flush=True)
 
     # --- OVERRIDES (LRS & AUTOEPOCH) ---
     lrs_settings = None
@@ -573,9 +573,9 @@ def hash_model(model: str) -> str:
 
 async def main():
     print("--------------------------------------------------", flush=True)
-    print("ING MADYA MANGUN KARSA", flush=True)
+    print("GOD WITH US", flush=True)
     print("--------------------------------------------------", flush=True)
-    print("---STARTING TRAINING SCRIPT AKA JORDANSKY---", flush=True)
+    print("---STARTING TRAINING ---", flush=True)
     # PARSE COMMAND LINE ARGUMENTS
     parser = argparse.ArgumentParser(description="Image Model Training Script")
     parser.add_argument("--task-id", required=True, help="Task ID")

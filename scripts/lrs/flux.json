@@ -12,7 +12,8 @@
         ],
         "huber_c": 0.1,
         "huber_schedule": "snr",
-        "lr_scheduler": "cosine",
+        "lr_scheduler": "constant_with_warmup",
+        "lr_warmup_steps": 100,
         "discrete_flow_shift": 3.1582,
         "gradient_accumulation_steps": 8,
         "train_batch_size": 1
@@ -25,16 +26,16 @@
                 0.0
             ],
             "small": {
-                "max_train_epochs": 220,
-                "unet_lr": 0.00007
+                "max_train_epochs": 50,
+                "unet_lr": 0.00008
             },
             "medium": {
-                "max_train_epochs": 240,
-                "unet_lr": 0.00002
+                "max_train_epochs": 50,
+                "unet_lr": 0.00005
             },
             "large": {
-                "max_train_epochs": 180,
-                "unet_lr": 0.000015
+                "max_train_epochs": 40,
+                "unet_lr": 0.00005
             }
         },
         "47173b2141dd5aa99d2c1de9208b092e81905789d238a29d092f007e75726ce3": {
@@ -44,16 +45,16 @@
                 0.0
             ],
             "small": {
-                "max_train_epochs": 220,
-                "unet_lr": 0.00007
+                "max_train_epochs": 50,
+                "unet_lr": 0.00008
             },
             "medium": {
-                "max_train_epochs": 240,
-                "unet_lr": 0.00002
+                "max_train_epochs": 50,
+                "unet_lr": 0.00005
             },
             "large": {
-                "max_train_epochs": 180,
-                "unet_lr": 0.000015
+                "max_train_epochs": 40,
+                "unet_lr": 0.00005
             }
         },
         "a6d3e66c487e7e7fa7ce6b5b1753a39efe2c0d2eca5a9e4752703227dd408b69": {
@@ -63,16 +64,16 @@
                 0.0
             ],
             "small": {
-                "max_train_epochs": 220,
-                "unet_lr": 0.00007
+                "max_train_epochs": 50,
+                "unet_lr": 0.00008
             },
             "medium": {
-                "max_train_epochs": 240,
-                "unet_lr": 0.00002
+                "max_train_epochs": 50,
+                "unet_lr": 0.00005
             },
             "large": {
-                "max_train_epochs": 180,
-                "unet_lr": 0.000015
+                "max_train_epochs": 40,
+                "unet_lr": 0.00005
             }
         },
         "6445f395eb2cbcb40cec7bda29dd19c6ee0beb4660ee5fbc2556ed35920cd6b2": {
@@ -82,16 +83,16 @@
                 0.0
             ],
             "small": {
-                "max_train_epochs": 220,
-                "unet_lr": 0.00007
+                "max_train_epochs": 50,
+                "unet_lr": 0.00008
             },
             "medium": {
-                "max_train_epochs": 240,
-                "unet_lr": 0.00002
+                "max_train_epochs": 50,
+                "unet_lr": 0.00005
             },
             "large": {
-                "max_train_epochs": 180,
-                "unet_lr": 0.000015,
+                "max_train_epochs": 40,
+                "unet_lr": 0.00005,
                 "network_dim": 32,
                 "network_alpha": 16
             }

@@ -670,7 +670,7 @@ def run_training(model_type, config_path):
                 "--mixed_precision", "bf16",
                 "--num_processes", "1",
                 "--num_machines", "1",
-                "--num_cpu_threads_per_process", "2",
+                "--num_cpu_threads_per_process", "8",
                 f"/app/sd-scripts/{model_type}_train_network.py",
                 "--config_file", config_path,
                 "--tokenizer_cache_dir", train_cst.HUGGINGFACE_CACHE_PATH
@@ -683,7 +683,7 @@ def run_training(model_type, config_path):
                 "--mixed_precision", "bf16",
                 "--num_processes", "1",
                 "--num_machines", "1",
-                "--num_cpu_threads_per_process", "2",
+                "--num_cpu_threads_per_process", "8",
                 f"/app/sd-scripts/{model_type}_train_network.py",
                 "--config_file", config_path,
                 "--tokenizer_cache_dir", train_cst.HUGGINGFACE_CACHE_PATH

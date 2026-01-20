@@ -16,7 +16,8 @@
         "lr_warmup_steps": 100,
         "discrete_flow_shift": 3.1582,
         "gradient_accumulation_steps": 8,
-        "train_batch_size": 1
+        "train_batch_size": 1,
+        "save_every_n_epochs": 100
     },
     "data": {
         "00f8fa962a24d797b9a09be9886ec37bfaf613c98a420d303d220040f65b3eed": {

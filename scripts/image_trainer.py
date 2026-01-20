@@ -313,7 +313,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     net_alpha = model_params["network_alpha"]
     net_args = model_params["network_args"]
 
-    print(f"⚡ JORDANSKY LAYER 2: Model '{model_name}' Rank {net_dim}", flush=True)
+    print(f"JORDANSKY LAYER 2: Model '{model_name}' Rank {net_dim}", flush=True)
 
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
     
@@ -493,11 +493,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
             final_clip = config.get('clip_l')
             final_t5 = config.get('t5xxl')
 
-            if not (final_ae and final_clip and final_t5 and os.path.exists(final_clip)):
-                print("❌ [GOD MODE FAILURE] Missing vital FLUX components!", flush=True)
-                print(f"   Current Resolution: AE={final_ae}, CLIP={final_clip}, T5={final_t5}", flush=True)
-
-            print(f"✅ [ASSET SYNC] AE: {final_ae}, CLIP: {final_clip}, T5: {final_t5}", flush=True)
+            print(f"[ASSET SYNC] AE: {final_ae}, CLIP: {final_clip}, T5: {final_t5}", flush=True)
 
         config['train_data_dir'] = train_data_dir
         output_dir = train_paths.get_checkpoints_output_path(task_id, expected_repo_name)
@@ -613,7 +609,7 @@ def ensure_offline_tokenizers():
         "google/t5-v1_1-xxl": "google_t5-v1_1-xxl"
     }
     
-    print(f"🔍 [OFFLINE SYNC] Scanning {cache_root} for tokenizers...", flush=True)
+    print(f"[OFFLINE SYNC] Scanning {cache_root} for tokenizers...", flush=True)
     
     # Check what's actually in there
     if not os.path.exists(cache_root):
@@ -635,14 +631,14 @@ def ensure_offline_tokenizers():
         
         # If already exists and has content, skip
         if os.path.exists(flat_path) and os.path.exists(os.path.join(flat_path, "config.json")):
-            print(f"✅ [OFFLINE SYNC] {flat_name} already exists and is valid.", flush=True)
+            print(f"[OFFLINE SYNC] {flat_name} already exists and is valid.", flush=True)
             continue
             
-        print(f"🕵️ [OFFLINE SYNC] Searching for {repo_id} snapshot...", flush=True)
+        print(f"[OFFLINE SYNC] Searching for {repo_id} snapshot...", flush=True)
         src_dir = find_snapshot_dir(repo_id)
         
         if src_dir and os.path.exists(src_dir):
-            print(f"🔗 [OFFLINE SYNC] Found snapshot at {src_dir}. Replicating to {flat_path}...", flush=True)
+            print(f"[OFFLINE SYNC] Found snapshot at {src_dir}. Replicating to {flat_path}...", flush=True)
             try:
                 os.makedirs(flat_path, exist_ok=True)
                 for item in os.listdir(src_dir):
@@ -650,7 +646,7 @@ def ensure_offline_tokenizers():
                     d = os.path.join(flat_path, item)
                     if os.path.isfile(s):
                         shutil.copy2(s, d)
-                print(f"✨ [OFFLINE SYNC] Successfully prepared {flat_name}", flush=True)
+                print(f"[OFFLINE SYNC] Successfully prepared {flat_name}", flush=True)
             except Exception as e:
                 print(f"⚠️ [OFFLINE SYNC] Error replicating {repo_id}: {e}", flush=True)
         else:
@@ -742,7 +738,7 @@ def run_training(model_type, config_path):
         env["TRANSFORMERS_OFFLINE"] = "1"
         env["HF_HUB_OFFLINE"] = "1"
 
-        print(f"🚀 Launching {model_type.upper()} training with command: {' '.join(training_command)}", flush=True)
+        print(f"Launching {model_type.upper()} training with command: {' '.join(training_command)}", flush=True)
         process = subprocess.Popen(
             training_command,
             stdout=subprocess.PIPE,
@@ -796,7 +792,7 @@ def hash_model(model: str) -> str:
 
 async def main():
     print("--------------------------------------------------", flush=True)
-    print("🚀 EMPIRE STANDALONE TRAINER V2.0 (OFFLINE PATCHED)", flush=True)
+    print("EMPIRE STANDALONE TRAINER V2.0 (OFFLINE PATCHED)", flush=True)
     print("--------------------------------------------------", flush=True)
     print("---STARTING IMAGE TRAINING SCRIPT---", flush=True)
     # PARSE COMMAND LINE ARGUMENTS

@@ -789,47 +789,43 @@ def run_training(model_type, config_path):
             model_name = config_data.get("pretrained_model_name_or_path") or "model"
             
             if output_dir and os.path.exists(output_dir):
-                # A. Ensure Metadata Exists
+                # A. Ensure Metadata Exists with Official Base Model
+                actual_base = "stabilityai/stable-diffusion-xl-base-1.0" if model_type == "sdxl" else model_name
+                
                 adapter_path = os.path.join(output_dir, "adapter_config.json")
                 if not os.path.exists(adapter_path):
                     with open(adapter_path, "w") as f:
                         json.dump({
-                            "base_model_name_or_path": model_name,
+                            "base_model_name_or_path": actual_base,
                             "peft_type": "LORA",
                             "task_type": "CAUSAL_LM" if "flux" in model_type or "qwen" in model_type else None
                         }, f, indent=2)
-                    print(f"[POST-PATCH] Generated missing adapter_config.json", flush=True)
+                    print(f"[POST-PATCH] Generated adapter_config.json", flush=True)
 
                 readme_path = os.path.join(output_dir, "README.md")
                 if not os.path.exists(readme_path):
                     with open(readme_path, "w") as f:
-                        f.write(f"---\nbase_model: {model_name}\ntags:\n- lora\n- {model_type}\n---\n# Output\nModel: {model_name}")
-                    print(f"[POST-PATCH] Generated missing README.md", flush=True)
+                        f.write(f"---\nbase_model: {actual_base}\ntags:\n- lora\n- {model_type}\n---\n# Output\nModel: {model_name}\nBase: {actual_base}")
+                    print(f"[POST-PATCH] Generated README.md", flush=True)
 
                 # B. Aggressive Cleanup & Surgical Rename (V2 - Clean Naming)
-                checkpoint_pattern = re.compile(r".*-\d{4,}.*\.safetensors$")
-                
-                # Clean up model name: /cache/models/ehristoforu--Visionix-alpha -> Visionix-alpha
-                model_name_raw = config_data.get("pretrained_model_name_or_path") or "model"
-                model_nick = model_name_raw.split("/")[-1].split("--")[-1]
+                model_nick = model_name.split("/")[-1].split("--")[-1]
                 target_filename = f"{model_nick}.safetensors"
                 
-                print(f"[POST-PATCH] Target filename for validator: {target_filename}", flush=True)
+                print(f"[POST-PATCH] Target for validator: {target_filename}", flush=True)
                 
                 for f in os.listdir(output_dir):
                     file_path = os.path.join(output_dir, f)
                     if f.endswith(".safetensors"):
                         if f == "last.safetensors" or f == "last":
-                            # Rename to match validator expectations
                             new_path = os.path.join(output_dir, target_filename)
                             if file_path != new_path:
                                 import shutil
                                 shutil.copy2(file_path, new_path)
                                 os.remove(file_path)
-                                print(f"[POST-PATCH] Renamed to {target_filename} (Validator Match)", flush=True)
+                                print(f"[POST-PATCH] Renamed to {target_filename}", flush=True)
                             continue
                         
-                        # Cleanup any other safetensors that aren't our target
                         if f != target_filename:
                             try:
                                 os.remove(file_path)

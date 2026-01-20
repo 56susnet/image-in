@@ -313,7 +313,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     net_alpha = model_params["network_alpha"]
     net_args = model_params["network_args"]
 
-    print(f"JORDANSKY LAYER 2: Model '{model_name}' Rank {net_dim}", flush=True)
+    print(f"⚡ JORDANSKY LAYER 2: Model '{model_name}' Rank {net_dim}", flush=True)
 
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
     
@@ -493,7 +493,11 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
             final_clip = config.get('clip_l')
             final_t5 = config.get('t5xxl')
 
-            print(f"[ASSET SYNC] AE: {final_ae}, CLIP: {final_clip}, T5: {final_t5}", flush=True)
+            if not (final_ae and final_clip and final_t5 and os.path.exists(final_clip)):
+                print("❌ [GOD MODE FAILURE] Missing vital FLUX components!", flush=True)
+                print(f"   Current Resolution: AE={final_ae}, CLIP={final_clip}, T5={final_t5}", flush=True)
+
+            print(f"✅ [ASSET SYNC] AE: {final_ae}, CLIP: {final_clip}, T5: {final_t5}", flush=True)
 
         config['train_data_dir'] = train_data_dir
         output_dir = train_paths.get_checkpoints_output_path(task_id, expected_repo_name)
@@ -503,20 +507,12 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         # Apply Overrides (Priority: Autoepoch < LRS)
         section_map = {}
         
-        if model_type == "sdxl":
-            section_map["unet_lr"] = ("nospec", "unet_lr")
-            section_map["text_encoder_lr"] = ("nospec", "text_encoder_lr")
-            section_map["network_dim"] = ("additional_network_arguments", "network_dim")
-            section_map["network_alpha"] = ("additional_network_arguments", "network_alpha")
-            section_map["save_every_n_epochs"] = (None, "save_every_n_epochs")
-
         # FLUX Specific Direct Overrides (G.O.D Style - All Flat)
         if model_type == "flux":
             section_map["unet_lr"] = (None, "unet_lr")
             section_map["text_encoder_lr"] = (None, "text_encoder_lr")
             section_map["optimizer_type"] = (None, "optimizer_type")
             section_map["optimizer_args"] = (None, "optimizer_args")
-            section_map["save_every_n_epochs"] = (None, "save_every_n_epochs")
 
         # Apply Overrides (Priority: Autoepoch < LRS)
         configs_to_apply = [size_config, lrs_settings]
@@ -543,55 +539,8 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                             print(f"   [COHERENCE] Clearing max_train_steps to prioritize epoch scaling ({value} epochs)", flush=True)
                             del config["max_train_steps"]
 
-        # JORDANSKY FINAL VALIDATION: Auto-disable TE training if LR is 0.0 (Global Check)
-        if "text_encoder_lr" in config:
-            val = config["text_encoder_lr"]
-            is_zero = False
-            if isinstance(val, list) and all(float(v) == 0.0 for v in val): is_zero = True
-            elif isinstance(val, (int, float)) and float(val) == 0.0: is_zero = True
-            
-            if is_zero:
-                print(f"   [SPEED BOOST] Detected 0.0 LR for Text Encoder -> Forcing 'network_train_unet_only' = True", flush=True)
-                config["network_train_unet_only"] = True
-                del config["text_encoder_lr"]
-
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)
-
-        # --- UNIVERSAL VALIDATOR COMPATIBILITY PATCH ---
-        import json, re
-        # 1. Ensure Metadata Exists
-        adapter_path = os.path.join(output_dir, "adapter_config.json")
-        if not os.path.exists(adapter_path):
-            with open(adapter_path, "w") as f:
-                json.dump({
-                    "base_model_name_or_path": model_name,
-                    "peft_type": "LORA",
-                    "task_type": "CAUSAL_LM" if "flux" in model_type or "qwen" in model_type else None
-                }, f, indent=2)
-            print(f"   [UNIVERSAL PATCH] Generated missing adapter_config.json for {model_type}", flush=True)
-
-        readme_path = os.path.join(output_dir, "README.md")
-        if not os.path.exists(readme_path):
-            with open(readme_path, "w") as f:
-                f.write(f"---\nbase_model: {model_name}\ntags:\n- lora\n- {model_type}\n---\n# {expected_repo_name}\nTask ID: {task_id}")
-            print(f"   [UNIVERSAL PATCH] Generated missing README.md for {model_type}", flush=True)
-
-        # 2. Aggressive Cleanup: Keep ONLY 'last.safetensors' (Avoid confused validators)
-        # Patterns like: last-000001.safetensors, model-000005.safetensors, etc.
-        checkpoint_pattern = re.compile(r".*-\d{4,}.*\.safetensors$")
-        for f in os.listdir(output_dir):
-            file_path = os.path.join(output_dir, f)
-            if f.endswith(".safetensors"):
-                if f == "last.safetensors": continue # Keep the good one
-                
-                # If it's a numbered checkpoint OR doesn't match 'last.safetensors' exactly
-                if checkpoint_pattern.match(f) or ("-" in f and any(char.isdigit() for char in f)):
-                    try:
-                        os.remove(file_path)
-                        print(f"   [UNIVERSAL PATCH] Cleaned up intermediate/duplicate: {f}", flush=True)
-                    except: pass
-
         print(f"Created config at {config_path}", flush=True)
         return config_path
 
@@ -609,7 +558,7 @@ def ensure_offline_tokenizers():
         "google/t5-v1_1-xxl": "google_t5-v1_1-xxl"
     }
     
-    print(f"[OFFLINE SYNC] Scanning {cache_root} for tokenizers...", flush=True)
+    print(f"🔍 [OFFLINE SYNC] Scanning {cache_root} for tokenizers...", flush=True)
     
     # Check what's actually in there
     if not os.path.exists(cache_root):
@@ -631,14 +580,14 @@ def ensure_offline_tokenizers():
         
         # If already exists and has content, skip
         if os.path.exists(flat_path) and os.path.exists(os.path.join(flat_path, "config.json")):
-            print(f"[OFFLINE SYNC] {flat_name} already exists and is valid.", flush=True)
+            print(f"✅ [OFFLINE SYNC] {flat_name} already exists and is valid.", flush=True)
             continue
             
-        print(f"[OFFLINE SYNC] Searching for {repo_id} snapshot...", flush=True)
+        print(f"🕵️ [OFFLINE SYNC] Searching for {repo_id} snapshot...", flush=True)
         src_dir = find_snapshot_dir(repo_id)
         
         if src_dir and os.path.exists(src_dir):
-            print(f"[OFFLINE SYNC] Found snapshot at {src_dir}. Replicating to {flat_path}...", flush=True)
+            print(f"🔗 [OFFLINE SYNC] Found snapshot at {src_dir}. Replicating to {flat_path}...", flush=True)
             try:
                 os.makedirs(flat_path, exist_ok=True)
                 for item in os.listdir(src_dir):
@@ -646,7 +595,7 @@ def ensure_offline_tokenizers():
                     d = os.path.join(flat_path, item)
                     if os.path.isfile(s):
                         shutil.copy2(s, d)
-                print(f"[OFFLINE SYNC] Successfully prepared {flat_name}", flush=True)
+                print(f"✨ [OFFLINE SYNC] Successfully prepared {flat_name}", flush=True)
             except Exception as e:
                 print(f"⚠️ [OFFLINE SYNC] Error replicating {repo_id}: {e}", flush=True)
         else:
@@ -674,7 +623,6 @@ def ensure_offline_tokenizers():
                     shutil.copy2(os.path.join(qwen_root, "config.json"), os.path.join(transformer_dir, "config.json"))
                 
                 # Copy the model file
-                # Use COPY instead of MOVE to be safe if original is symlinked
                 shutil.copy2(os.path.join(qwen_root, found_model), os.path.join(transformer_dir, "diffusion_pytorch_model.bin"))
                 print("✅ [OFFLINE FIX] Qwen structure corrected.", flush=True)
             except Exception as e:
@@ -709,7 +657,7 @@ def run_training(model_type, config_path):
                 "--mixed_precision", "bf16",
                 "--num_processes", "1",
                 "--num_machines", "1",
-                "--num_cpu_threads_per_process", "8",
+                "--num_cpu_threads_per_process", "2",
                 f"/app/sd-scripts/{model_type}_train_network.py",
                 "--config_file", config_path,
                 "--tokenizer_cache_dir", train_cst.HUGGINGFACE_CACHE_PATH
@@ -722,7 +670,7 @@ def run_training(model_type, config_path):
                 "--mixed_precision", "bf16",
                 "--num_processes", "1",
                 "--num_machines", "1",
-                "--num_cpu_threads_per_process", "8",
+                "--num_cpu_threads_per_process", "2",
                 f"/app/sd-scripts/{model_type}_train_network.py",
                 "--config_file", config_path,
                 "--tokenizer_cache_dir", train_cst.HUGGINGFACE_CACHE_PATH
@@ -738,7 +686,7 @@ def run_training(model_type, config_path):
         env["TRANSFORMERS_OFFLINE"] = "1"
         env["HF_HUB_OFFLINE"] = "1"
 
-        print(f"Launching {model_type.upper()} training with command: {' '.join(training_command)}", flush=True)
+        print(f"🚀 Launching {model_type.upper()} training with command: {' '.join(training_command)}", flush=True)
         process = subprocess.Popen(
             training_command,
             stdout=subprocess.PIPE,
@@ -777,32 +725,6 @@ def run_training(model_type, config_path):
                     print(f"[FIX] Successfully moved to {intended_output_dir}/last.safetensors", flush=True)
         except Exception as e:
             print(f"[FIX] Error moving checkpoint: {e}", flush=True)
-        
-        # --- UNIVERSAL VALIDATOR COMPATIBILITY PATCH (POST-TRAINING) ---
-        try:
-            import json, re, toml
-            # 1. Get output_dir from config
-            with open(config_path, "r") as f:
-                config_data = toml.load(f) if config_path.endswith(".toml") else yaml.safe_load(f)
-            
-            output_dir = config_data.get("output_dir")
-                # A. Essential Metadata Generation (Minimalist)
-                adapter_path = os.path.join(output_dir, "adapter_config.json")
-                if not os.path.exists(adapter_path):
-                    with open(adapter_path, "w") as f:
-                        json.dump({
-                            "base_model_name_or_path": model_name,
-                            "peft_type": "LORA"
-                        }, f, indent=2)
-                
-                readme_path = os.path.join(output_dir, "README.md")
-                if not os.path.exists(readme_path):
-                    with open(readme_path, "w") as f:
-                        f.write(f"---\nbase_model: {model_name}\ntags:\n- lora\n- {model_type}\n---\n# Training Output")
-                
-                print(f"[CLEAN] Metadata generated for {model_name}", flush=True)
-        except Exception as e:
-            print(f"[CLEAN] Finalizing error: {e}", flush=True)
         # ------------------------------------------------
 
     except subprocess.CalledProcessError as e:
@@ -818,7 +740,7 @@ def hash_model(model: str) -> str:
 
 async def main():
     print("--------------------------------------------------", flush=True)
-    print("EMPIRE STANDALONE TRAINER V2.0 (OFFLINE PATCHED)", flush=True)
+    print("🚀 EMPIRE STANDALONE TRAINER V2.0 (OFFLINE PATCHED)", flush=True)
     print("--------------------------------------------------", flush=True)
     print("---STARTING IMAGE TRAINING SCRIPT---", flush=True)
     # PARSE COMMAND LINE ARGUMENTS

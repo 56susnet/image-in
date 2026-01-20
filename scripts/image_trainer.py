@@ -786,53 +786,23 @@ def run_training(model_type, config_path):
                 config_data = toml.load(f) if config_path.endswith(".toml") else yaml.safe_load(f)
             
             output_dir = config_data.get("output_dir")
-            model_name = config_data.get("pretrained_model_name_or_path") or "model"
-            
-            if output_dir and os.path.exists(output_dir):
-                # A. Ensure Metadata Exists with Official Base Model
-                actual_base = "stabilityai/stable-diffusion-xl-base-1.0" if model_type == "sdxl" else model_name
-                
+                # A. Essential Metadata Generation (Minimalist)
                 adapter_path = os.path.join(output_dir, "adapter_config.json")
                 if not os.path.exists(adapter_path):
                     with open(adapter_path, "w") as f:
                         json.dump({
-                            "base_model_name_or_path": actual_base,
-                            "peft_type": "LORA",
-                            "task_type": "CAUSAL_LM" if "flux" in model_type or "qwen" in model_type else None
+                            "base_model_name_or_path": model_name,
+                            "peft_type": "LORA"
                         }, f, indent=2)
-                    print(f"[POST-PATCH] Generated adapter_config.json", flush=True)
-
+                
                 readme_path = os.path.join(output_dir, "README.md")
                 if not os.path.exists(readme_path):
                     with open(readme_path, "w") as f:
-                        f.write(f"---\nbase_model: {actual_base}\ntags:\n- lora\n- {model_type}\n---\n# Output\nModel: {model_name}\nBase: {actual_base}")
-                    print(f"[POST-PATCH] Generated README.md", flush=True)
-
-                # B. Aggressive Cleanup & Surgical Rename (V2 - Clean Naming)
-                model_nick = model_name.split("/")[-1].split("--")[-1]
-                target_filename = f"{model_nick}.safetensors"
+                        f.write(f"---\nbase_model: {model_name}\ntags:\n- lora\n- {model_type}\n---\n# Training Output")
                 
-                print(f"[POST-PATCH] Target for validator: {target_filename}", flush=True)
-                
-                for f in os.listdir(output_dir):
-                    file_path = os.path.join(output_dir, f)
-                    if f.endswith(".safetensors"):
-                        if f == "last.safetensors" or f == "last":
-                            new_path = os.path.join(output_dir, target_filename)
-                            if file_path != new_path:
-                                import shutil
-                                shutil.copy2(file_path, new_path)
-                                os.remove(file_path)
-                                print(f"[POST-PATCH] Renamed to {target_filename}", flush=True)
-                            continue
-                        
-                        if f != target_filename:
-                            try:
-                                os.remove(file_path)
-                                print(f"[POST-PATCH] Cleaned up: {f}", flush=True)
-                            except: pass
+                print(f"[CLEAN] Metadata generated for {model_name}", flush=True)
         except Exception as e:
-            print(f"[POST-PATCH] Error during cleanup/rename: {e}", flush=True)
+            print(f"[CLEAN] Finalizing error: {e}", flush=True)
         # ------------------------------------------------
 
     except subprocess.CalledProcessError as e:

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 """
 # Reverse Config (Jordansky)
 """
@@ -9,6 +8,7 @@ import asyncio
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import re
@@ -18,7 +18,8 @@ import toml
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
-sys.path.append(project_root)
+if project_root not in sys.path:
+    sys.path.append(project_root)
 
 import core.constants as cst
 import trainer.constants as train_cst
@@ -28,12 +29,15 @@ from core.dataset.prepare_diffusion_dataset import prepare_dataset
 from core.models.utility_models import ImageModelType
 
 
+
 def get_model_path(path: str) -> str:
     if os.path.isdir(path):
         files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
         if len(files) == 1 and files[0].endswith(".safetensors"):
             return os.path.join(path, files[0])
     return path
+
+
 def merge_model_config(default_config: dict, model_config: dict) -> dict:
     merged = {}
 
@@ -48,6 +52,7 @@ def merge_model_config(default_config: dict, model_config: dict) -> dict:
                 merged[k] = v
 
     return merged if merged else None
+
 
 def count_images_in_directory(directory_path: str) -> int:
     image_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'}
@@ -72,15 +77,36 @@ def count_images_in_directory(directory_path: str) -> int:
     
     return count
 
+
+def find_surgical(files_found, name, golden_min, golden_max, must_contain=None, avoid=["part", "of-", "sharded"]):
+    matches = []
+    for entry in files_found:
+        p, sz, root = entry["path"], entry["size"], entry["root"]
+        if golden_min <= sz <= golden_max:
+            if avoid and any(a in p.lower() for a in avoid):
+                continue
+            if must_contain and must_contain not in p.lower():
+                continue
+            score = 0
+            if "flux" in p.lower() or "flux" in root.lower():
+                score += 100
+            if name.lower() in p.lower() or name.lower() in root.lower():
+                score += 50
+            matches.append((score, sz, p))
+    if matches:
+        matches.sort(key=lambda x: (-x[0], -x[1]))
+        return matches[0][2]
+    return None
+
+
 def load_size_based_config(model_type: str, is_style: bool, dataset_size: int) -> dict:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
     config_dir = os.path.join(script_dir, "autoepoch") 
     
-    if model_type == "flux":
+    if model_type == ImageModelType.FLUX.value:
         config_file = os.path.join(config_dir, "a-epochflux.json")
-    elif model_type == "qwen-image":
+    elif model_type == ImageModelType.QWEN_IMAGE.value:
         config_file = os.path.join(config_dir, "a-epochqwen.json")
-    elif model_type == "z-image":
+    elif model_type == ImageModelType.Z_IMAGE.value:
         config_file = os.path.join(config_dir, "a-epochz.json")
     elif is_style:
         config_file = os.path.join(config_dir, "a-epochstyle.json")
@@ -113,6 +139,7 @@ def load_size_based_config(model_type: str, is_style: bool, dataset_size: int) -
         print(f"Warning: Could not load autoepoch config from {config_file}: {e}", flush=True)
         return None
 
+
 def get_dataset_size_category(dataset_size: int) -> str:
     if dataset_size <= 15:
         return "small"
@@ -120,6 +147,7 @@ def get_dataset_size_category(dataset_size: int) -> str:
         return "medium"
     else:
         return "large"
+
 
 def get_config_for_model(lrs_config: dict, model_name: str, dataset_size: int = None) -> dict:
     if not isinstance(lrs_config, dict):
@@ -150,8 +178,8 @@ def get_config_for_model(lrs_config: dict, model_name: str, dataset_size: int = 
 
     return None
 
+
 def load_lrs_config(model_type: str, is_style: bool) -> dict:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
     config_dir = os.path.join(script_dir, "lrs")
 
     if model_type == ImageModelType.FLUX.value:
@@ -172,15 +200,19 @@ def load_lrs_config(model_type: str, is_style: bool) -> dict:
         print(f"Warning: Could not load LRS config from {config_file}: {e}", flush=True)
         return None
 
+
 def create_config(task_id, model_path, model_name, model_type, expected_repo_name, trigger_word):
     is_style = "style" in model_name.lower() or "style" in task_id.lower()
     train_data_dir = os.path.join(train_cst.IMAGE_CONTAINER_IMAGES_PATH, task_id)
+    dataset_size = count_images_in_directory(train_data_dir)
+    is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
+    output_dir = train_paths.get_checkpoints_output_path(task_id, expected_repo_name or "output")
     
-    # --- UNIFIED CONFIG RESOLUTION (PERSIMPLE) ---
+    # UNIFIED CONFIG RESOLUTION (PERSIMPLE)
     config_dir = os.path.join(script_dir, "core", "config")
     task_type = "style" if is_style else "person"
     
-    # Priority: Task-specific > Base, TOML > YAML
+    # TASK SPESIFIC
     potential_templates = [
         f"base_diffusion_{model_type}_{task_type}.toml",
         f"base_diffusion_{model_type}_{task_type}.yaml",
@@ -199,89 +231,42 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     if not config_template_path:
         raise FileNotFoundError(f"Could not find a valid config template for {model_type} in {config_dir}")
 
-    # --- LAYER 2: DICTIONARY & MAPPING 
+    # DICTIONARY & MAPPING 
     network_config_person = {
-        "stabilityai/stable-diffusion-xl-base-1.0": 235,
-        "Lykon/dreamshaper-xl-1-0": 235,
-        "Lykon/art-diffusion-xl-0.9": 235,
-        "SG161222/RealVisXL_V4.0": 467,
-        "stablediffusionapi/protovision-xl-v6.6": 235,
-        "stablediffusionapi/omnium-sdxl": 235,
-        "GraydientPlatformAPI/realism-engine2-xl": 235,
-        "GraydientPlatformAPI/albedobase2-xl": 467,
-        "KBlueLeaf/Kohaku-XL-Zeta": 235,
-        "John6666/hassaku-xl-illustrious-v10style-sdxl": 228,
-        "John6666/nova-anime-xl-pony-v5-sdxl": 235,
-        "cagliostrolab/animagine-xl-4.0": 699,
-        "dataautogpt3/CALAMITY": 235,
-        "dataautogpt3/ProteusSigma": 235,
-        "dataautogpt3/ProteusV0.5": 467,
-        "dataautogpt3/TempestV0.1": 500,
-        "ehristoforu/Visionix-alpha": 235,
-        "femboysLover/RealisticStockPhoto-fp16": 467,
-        "fluently/Fluently-XL-Final": 228,
-        "mann-e/Mann-E_Dreams": 456,
-        "misri/leosamsHelloworldXL_helloworldXL70": 235,
-        "misri/zavychromaxl_v90": 235,
-        "openart-custom/DynaVisionXL": 228,
-        "recoilme/colorfulxl": 228,
-        "zenless-lab/sdxl-aam-xl-anime-mix": 456,
-        "zenless-lab/sdxl-anima-pencil-xl-v5": 228,
-        "zenless-lab/sdxl-anything-xl": 228,
-        "zenless-lab/sdxl-blue-pencil-xl-v7": 467,
-        "Corcelio/mobius": 228,
-        "GHArt/Lah_Mysterious_SDXL_V4.0_xl_fp16": 235,
-        "OnomaAIResearch/Illustrious-xl-early-release-v0": 228,
-        "bghira/terminus-xl-velocity-v2": 235,
-        "ifmain/UltraReal_Fine-Tune": 467
+        "stabilityai/stable-diffusion-xl-base-1.0": 235, "Lykon/dreamshaper-xl-1-0": 235, "Lykon/art-diffusion-xl-0.9": 235,
+        "SG161222/RealVisXL_V4.0": 467, "stablediffusionapi/protovision-xl-v6.6": 235, "stablediffusionapi/omnium-sdxl": 235,
+        "GraydientPlatformAPI/realism-engine2-xl": 235, "GraydientPlatformAPI/albedobase2-xl": 467, "KBlueLeaf/Kohaku-XL-Zeta": 235,
+        "John6666/hassaku-xl-illustrious-v10style-sdxl": 228, "John6666/nova-anime-xl-pony-v5-sdxl": 235, "cagliostrolab/animagine-xl-4.0": 699,
+        "dataautogpt3/CALAMITY": 235, "dataautogpt3/ProteusSigma": 235, "dataautogpt3/ProteusV0.5": 467, "dataautogpt3/TempestV0.1": 500,
+        "ehristoforu/Visionix-alpha": 235, "femboysLover/RealisticStockPhoto-fp16": 467, "fluently/Fluently-XL-Final": 228,
+        "mann-e/Mann-E_Dreams": 456, "misri/leosamsHelloworldXL_helloworldXL70": 235, "misri/zavychromaxl_v90": 235,
+        "openart-custom/DynaVisionXL": 228, "recoilme/colorfulxl": 228, "zenless-lab/sdxl-aam-xl-anime-mix": 456,
+        "zenless-lab/sdxl-anima-pencil-xl-v5": 228, "zenless-lab/sdxl-anything-xl": 228, "zenless-lab/sdxl-blue-pencil-xl-v7": 467,
+        "Corcelio/mobius": 228, "GHArt/Lah_Mysterious_SDXL_V4.0_xl_fp16": 235, "OnomaAIResearch/Illustrious-xl-early-release-v0": 228,
+        "bghira/terminus-xl-velocity-v2": 235, "ifmain/UltraReal_Fine-Tune": 467
     }
 
     network_config_style = {
-        "stabilityai/stable-diffusion-xl-base-1.0": 235,
-        "Lykon/dreamshaper-xl-1-0": 235,
-        "Lykon/art-diffusion-xl-0.9": 235,
-        "SG161222/RealVisXL_V4.0": 235,
-        "stablediffusionapi/protovision-xl-v6.6": 235,
-        "stablediffusionapi/omnium-sdxl": 235,
-        "GraydientPlatformAPI/realism-engine2-xl": 235,
-        "GraydientPlatformAPI/albedobase2-xl": 235,
-        "KBlueLeaf/Kohaku-XL-Zeta": 235,
-        "John6666/hassaku-xl-illustrious-v10style-sdxl": 235,
-        "John6666/nova-anime-xl-pony-v5-sdxl": 235,
-        "cagliostrolab/animagine-xl-4.0": 235,
-        "dataautogpt3/CALAMITY": 235,
-        "dataautogpt3/ProteusSigma": 235,
-        "dataautogpt3/ProteusV0.5": 235,
-        "dataautogpt3/TempestV0.1": 500,
-        "ehristoforu/Visionix-alpha": 235,
-        "femboysLover/RealisticStockPhoto-fp16": 235,
-        "fluently/Fluently-XL-Final": 235,
-        "mann-e/Mann-E_Dreams": 235,
-        "misri/leosamsHelloworldXL_helloworldXL70": 235,
-        "misri/zavychromaxl_v90": 235,
-        "openart-custom/DynaVisionXL": 235,
-        "recoilme/colorfulxl": 235,
-        "zenless-lab/sdxl-aam-xl-anime-mix": 235,
-        "zenless-lab/sdxl-anima-pencil-xl-v5": 235,
-        "zenless-lab/sdxl-anything-xl": 235,
-        "zenless-lab/sdxl-blue-pencil-xl-v7": 235,
-        "Corcelio/mobius": 235,
-        "GHArt/Lah_Mysterious_SDXL_V4.0_xl_fp16": 235,
-        "OnomaAIResearch/Illustrious-xl-early-release-v0": 235,
-        "bghira/terminus-xl-velocity-v2": 235,
-        "ifmain/UltraReal_Fine-Tune": 235
+        "stabilityai/stable-diffusion-xl-base-1.0": 235, "Lykon/dreamshaper-xl-1-0": 235, "Lykon/art-diffusion-xl-0.9": 235,
+        "SG161222/RealVisXL_V4.0": 235, "stablediffusionapi/protovision-xl-v6.6": 235, "stablediffusionapi/omnium-sdxl": 235,
+        "GraydientPlatformAPI/realism-engine2-xl": 235, "GraydientPlatformAPI/albedobase2-xl": 235, "KBlueLeaf/Kohaku-XL-Zeta": 235,
+        "John6666/hassaku-xl-illustrious-v10style-sdxl": 235, "John6666/nova-anime-xl-pony-v5-sdxl": 235, "cagliostrolab/animagine-xl-4.0": 235,
+        "dataautogpt3/CALAMITY": 235, "dataautogpt3/ProteusSigma": 235, "dataautogpt3/ProteusV0.5": 235, "dataautogpt3/TempestV0.1": 500,
+        "ehristoforu/Visionix-alpha": 235, "femboysLover/RealisticStockPhoto-fp16": 235, "fluently/Fluently-XL-Final": 235,
+        "mann-e/Mann-E_Dreams": 235, "misri/leosamsHelloworldXL_helloworldXL70": 235, "misri/zavychromaxl_v90": 235,
+        "openart-custom/DynaVisionXL": 235, "recoilme/colorfulxl": 235, "zenless-lab/sdxl-aam-xl-anime-mix": 235,
+        "zenless-lab/sdxl-anima-pencil-xl-v5": 235, "zenless-lab/sdxl-anything-xl": 235, "zenless-lab/sdxl-blue-pencil-xl-v7": 235,
+        "Corcelio/mobius": 235, "GHArt/Lah_Mysterious_SDXL_V4.0_xl_fp16": 235, "OnomaAIResearch/Illustrious-xl-early-release-v0": 235,
+        "bghira/terminus-xl-velocity-v2": 235, "ifmain/UltraReal_Fine-Tune": 235
     }
 
     network_config_flux = {
-        "dataautogpt3/FLUX-MonochromeManga": 350,
-        "mikeyandfriends/PixelWave_FLUX.1-dev_03": 350,
-        "rayonlabs/FLUX.1-dev": 350,
-        "mhnakif/fluxunchained-dev": 350
+        "dataautogpt3/FLUX-MonochromeManga": 350, "mikeyandfriends/PixelWave_FLUX.1-dev_03": 350,
+        "rayonlabs/FLUX.1-dev": 350, "mhnakif/fluxunchained-dev": 350
     }
 
     network_config_qwen = {
-        "gradients-io-tournaments/Qwen-Image": 888,
-        "gradients-io-tournaments/Qwen-Image-Jib-Mix": 888
+        "gradients-io-tournaments/Qwen-Image": 888, "gradients-io-tournaments/Qwen-Image-Jib-Mix": 888
     }
 
     config_mapping = {
@@ -298,11 +283,11 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     }
 
     # Model Config ID
-    if model_type == "z-image":
+    if model_type == ImageModelType.Z_IMAGE.value:
         config_id = 999
-    elif model_type == "flux":
+    elif model_type == ImageModelType.FLUX.value:
         config_id = network_config_flux.get(model_name, 350)
-    elif model_type == "qwen-image":
+    elif model_type == ImageModelType.QWEN_IMAGE.value:
         config_id = network_config_qwen.get(model_name, 888)
     else:
         target_dict = network_config_style if is_style else network_config_person
@@ -310,24 +295,18 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
 
     model_params = config_mapping.get(config_id, config_mapping[235])
     net_dim = model_params["network_dim"]
-    net_alpha = model_params["network_alpha"]
-    net_args = model_params["network_args"]
 
-    print(f"⚡ JORDANSKY LAYER 2: Model '{model_name}' Rank {net_dim}", flush=True)
+    print(f"[JORDANSKY - LAYER 2] Model '{model_name}' Rank {net_dim}", flush=True)
 
-    is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
-    
-    # --- PREPARE OVERRIDES (LRS & AUTOEPOCH) ---
+    # --- OVERRIDES (LRS & AUTOEPOCH) ---
     lrs_settings = None
     size_config = None
     
     lrs_config = load_lrs_config(model_type, is_style)
     if lrs_config:
         model_hash = hash_model(model_name)
-        dataset_size = count_images_in_directory(train_data_dir)
         lrs_settings = get_config_for_model(lrs_config, model_hash, dataset_size)
 
-    dataset_size = count_images_in_directory(train_data_dir)
     if dataset_size > 0:
         size_config = load_size_based_config(model_type, is_style, dataset_size)
 
@@ -349,27 +328,22 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     if model_type == ImageModelType.Z_IMAGE.value:
                         process['model']['assistant_lora_path'] = os.path.join(train_cst.HUGGINGFACE_CACHE_PATH, "zimage_turbo_training_adapter_v2.safetensors")
                         
-                    elif model_type == ImageModelType.QWEN_IMAGE.value:
-                        # Qwen quantization path is handled via base template or LRS
-                        pass
-                        
                     if 'training_folder' in process:
-                        output_dir = train_paths.get_checkpoints_output_path(task_id, expected_repo_name or "output")
                         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)
                         process['training_folder'] = output_dir
                 
                 if 'datasets' in process:
+                    # AI-Toolkit expects images directly in folder_path.
+                    rep = cst.DIFFUSION_SDXL_REPEATS if model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS
+                    sub_pref = f"{rep}_"
+                    dataset_path = train_data_dir
+                    if os.path.exists(train_data_dir):
+                        for d in os.listdir(train_data_dir):
+                            if d.startswith(sub_pref) and os.path.isdir(os.path.join(train_data_dir, d)):
+                                dataset_path = os.path.join(train_data_dir, d)
+                                break
+                    
                     for dataset in process['datasets']:
-                        # AI-Toolkit expects images directly in folder_path.
-                        # prepare_dataset creates a subfolder like "1_lora style"
-                        rep = cst.DIFFUSION_SDXL_REPEATS if model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS
-                        sub_pref = f"{rep}_"
-                        dataset_path = train_data_dir
-                        if os.path.exists(train_data_dir):
-                            for d in os.listdir(train_data_dir):
-                                if d.startswith(sub_pref) and os.path.isdir(os.path.join(train_data_dir, d)):
-                                    dataset_path = os.path.join(train_data_dir, d)
-                                    break
                         dataset['folder_path'] = dataset_path
 
                 # --- ADVANCED AUTO-SCALING (JORDANSKY TUNING) ---
@@ -377,7 +351,6 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                 
                 def calculate_steps(epochs):
                     batch_size = process.get('train', {}).get('batch_size', 1)
-                    dataset_size = count_images_in_directory(train_data_dir)
                     if dataset_size == 0: return epochs
                     return int(epochs * (dataset_size / batch_size))
 
@@ -426,18 +399,17 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
 
         config['pretrained_model_name_or_path'] = model_path
         
-        # FLUX Component 
+        # FLUX COMPONENT
         if model_type == "flux":
             print("\n[FLUX GOD MODE] Starting precision asset fingerprinting...", flush=True)
             
-            # 1. HARD-PRIORITY: Standard Validator
+            # 1. HARD-PRIORITY
             std_paths = {
                 'ae': "/cache/models/ae.safetensors",
                 'clip_l': "/cache/models/clip_l.safetensors",
                 't5xxl': "/cache/models/t5xxl.safetensors"
             }
             
-            # Template compatibility
             def set_flux_arg(k, v):
                 config[k] = v
                 if 'model_arguments' not in config: config['model_arguments'] = {}
@@ -451,41 +423,29 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
             # 2. FALLBACK/DISCOVERY
             missing = [k for k in ['ae', 'clip_l', 't5xxl'] if not os.path.exists(config.get(k, ""))]
             if missing:
-                search_bases = ["/cache/models", "/app/models", "/app/flux", "/workspace/models", os.path.dirname(model_path)]
-                files_found = []
-                for b_dir in search_bases:
-                    if not os.path.exists(b_dir): continue
-                    for root, _, files in os.walk(b_dir):
-                        for f in files:
-                            if f.endswith(".safetensors"):
-                                p = os.path.join(root, f)
-                                sz = os.path.getsize(p) / (1024**3)
-                                files_found.append({"path": p, "size": sz, "root": root})
+                def search_for_flux_files():
+                    search_bases = ["/cache/models", "/app/models", "/app/flux", "/workspace/models", os.path.dirname(model_path)]
+                    found = []
+                    for b_dir in search_bases:
+                        if not os.path.exists(b_dir): continue
+                        for root, _, files in os.walk(b_dir):
+                            for f in files:
+                                if f.endswith(".safetensors"):
+                                    p = os.path.join(root, f)
+                                    sz = os.path.getsize(p) / (1024**3)
+                                    found.append({"path": p, "size": sz, "root": root})
+                    return found
 
-                def find_surgical(name, golden_min, golden_max, must_contain=None, avoid=["part", "of-", "sharded"]):
-                    matches = []
-                    for entry in files_found:
-                        p, sz, root = entry["path"], entry["size"], entry["root"]
-                        if golden_min <= sz <= golden_max:
-                            if avoid and any(a in p.lower() for a in avoid): continue
-                            if must_contain and must_contain not in p.lower(): continue
-                            score = 0
-                            if "flux" in p.lower() or "flux" in root.lower(): score += 100
-                            if name.lower() in p.lower() or name.lower() in root.lower(): score += 50
-                            matches.append((score, sz, p))
-                    if matches:
-                        matches.sort(key=lambda x: (-x[0], -x[1]))
-                        return matches[0][2]
-                    return None
+                files_found = search_for_flux_files()
 
                 if 'ae' in missing:
-                    path = find_surgical("AE", 0.3, 0.45, must_contain="ae")
+                    path = find_surgical(files_found, "AE", 0.3, 0.45, must_contain="ae")
                     if path: set_flux_arg('ae', path)
                 if 'clip_l' in missing:
-                    path = find_surgical("CLIP", 0.2, 0.45) or "/app/models/clip_l.safetensors"
+                    path = find_surgical(files_found, "CLIP", 0.2, 0.45) or "/app/models/clip_l.safetensors"
                     if path: set_flux_arg('clip_l', path)
                 if 't5xxl' in missing:
-                    path = find_surgical("T5", 4.3, 11.0, avoid=["part", "of-", "shard"])
+                    path = find_surgical(files_found, "T5", 4.3, 11.0, avoid=["part", "of-", "shard"])
                     if path: set_flux_arg('t5xxl', path)
 
             # 3. CRITICAL COHERENCE
@@ -494,13 +454,12 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
             final_t5 = config.get('t5xxl')
 
             if not (final_ae and final_clip and final_t5 and os.path.exists(final_clip)):
-                print("❌ [GOD MODE FAILURE] Missing vital FLUX components!", flush=True)
+                print("[GOD MODE FAILURE] Missing vital FLUX components!", flush=True)
                 print(f"   Current Resolution: AE={final_ae}, CLIP={final_clip}, T5={final_t5}", flush=True)
 
-            print(f"✅ [ASSET SYNC] AE: {final_ae}, CLIP: {final_clip}, T5: {final_t5}", flush=True)
+            print(f"[ASSET SYNC] AE: {final_ae}, CLIP: {final_clip}, T5: {final_t5}", flush=True)
 
         config['train_data_dir'] = train_data_dir
-        output_dir = train_paths.get_checkpoints_output_path(task_id, expected_repo_name)
         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)
         config['output_dir'] = output_dir
 
@@ -515,12 +474,9 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
             section_map["optimizer_args"] = (None, "optimizer_args")
 
         # Apply Overrides (Priority: Autoepoch < LRS)
-        configs_to_apply = [size_config, lrs_settings]
+        configs_to_apply = [cfg for cfg in [size_config, lrs_settings] if cfg]
         
         for cfg in configs_to_apply:
-            if not cfg:
-                continue
-                
             for key, value in cfg.items():
                 if key in section_map:
                     sec, target = section_map[key]
@@ -533,7 +489,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     # Direct injection for root keys (max_train_epochs, train_batch_size, etc.)
                     config[key] = value
                     
-                    # COHERENCE: If we set max_train_epochs, clear max_train_steps to avoid conflicts
+                    # 
                     if key == "max_train_epochs":
                         if "max_train_steps" in config:
                             print(f"   [COHERENCE] Clearing max_train_steps to prioritize epoch scaling ({value} epochs)", flush=True)
@@ -542,151 +498,37 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)
         print(f"Created config at {config_path}", flush=True)
-        return config_path
+        return config_path, output_dir
 
-def ensure_offline_tokenizers():
-    """Bridge Hugging Face HUB structure to SD-Scripts FLAT structure.
-    Surgically find snapshots and create flat folders for offline loading.
-    """
-    import shutil
-    cache_root = train_cst.HUGGINGFACE_CACHE_PATH
-    
-    # Mapping for SDXL tokenizers
-    mapping = {
-        "openai/clip-vit-large-patch14": "openai_clip-vit-large-patch14",
-        "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k": "laion_CLIP-ViT-bigG-14-laion2B-39B-b160k",
-        "google/t5-v1_1-xxl": "google_t5-v1_1-xxl"
-    }
-    
-    print(f"🔍 [OFFLINE SYNC] Scanning {cache_root} for tokenizers...", flush=True)
-    
-    # Check what's actually in there
-    if not os.path.exists(cache_root):
-        print(f"❌ [OFFLINE SYNC] ERROR: Cache root {cache_root} does not exist!", flush=True)
-        return
 
-    # Helper to find the actual snapshot directory recursively
-    def find_snapshot_dir(target_repo):
-        search_slug = target_repo.replace("/", "--")
-        for root, dirs, files in os.walk(cache_root):
-            if search_slug in root and "snapshots" in root:
-                # We are in the snapshots folder, return the first child directory (the hash)
-                if dirs:
-                    return os.path.join(root, dirs[0])
-        return None
 
-    for repo_id, flat_name in mapping.items():
-        flat_path = os.path.join(cache_root, flat_name)
-        
-        # If already exists and has content, skip
-        if os.path.exists(flat_path) and os.path.exists(os.path.join(flat_path, "config.json")):
-            print(f"✅ [OFFLINE SYNC] {flat_name} already exists and is valid.", flush=True)
-            continue
-            
-        print(f"🕵️ [OFFLINE SYNC] Searching for {repo_id} snapshot...", flush=True)
-        src_dir = find_snapshot_dir(repo_id)
-        
-        if src_dir and os.path.exists(src_dir):
-            print(f"🔗 [OFFLINE SYNC] Found snapshot at {src_dir}. Replicating to {flat_path}...", flush=True)
-            try:
-                os.makedirs(flat_path, exist_ok=True)
-                for item in os.listdir(src_dir):
-                    s = os.path.join(src_dir, item)
-                    d = os.path.join(flat_path, item)
-                    if os.path.isfile(s):
-                        shutil.copy2(s, d)
-                print(f"✨ [OFFLINE SYNC] Successfully prepared {flat_name}", flush=True)
-            except Exception as e:
-                print(f"⚠️ [OFFLINE SYNC] Error replicating {repo_id}: {e}", flush=True)
-        else:
-            print(f"❌ [OFFLINE SYNC] Could not find any snapshots for {repo_id} in {cache_root}", flush=True)
-
-    # --- QWEN SPECIFIC FIX: Ensure 'transformer' subfolder exists ---
-    qwen_root = "/cache/models/gradients-io-tournaments--Qwen-Image"
-    transformer_dir = os.path.join(qwen_root, "transformer")
-    
-    # Check if we have the model but not the folder structure
-    if os.path.exists(qwen_root):
-        # Look for the .bin or .safetensors file in root
-        found_model = None
-        for f in os.listdir(qwen_root):
-             if f.endswith(".bin") or f.endswith(".safetensors"):
-                 found_model = f
-                 break
-        
-        if found_model and not os.path.exists(transformer_dir):
-            print(f"🔧 [OFFLINE FIX] Correcting Qwen structure. Moving {found_model} to transformer/...", flush=True)
-            try:
-                os.makedirs(transformer_dir, exist_ok=True)
-                # Copy config.json too if exists
-                if os.path.exists(os.path.join(qwen_root, "config.json")):
-                    shutil.copy2(os.path.join(qwen_root, "config.json"), os.path.join(transformer_dir, "config.json"))
-                
-                # Copy the model file
-                shutil.copy2(os.path.join(qwen_root, found_model), os.path.join(transformer_dir, "diffusion_pytorch_model.bin"))
-                print("✅ [OFFLINE FIX] Qwen structure corrected.", flush=True)
-            except Exception as e:
-                 print(f"⚠️ [OFFLINE FIX] Failed to restructure Qwen: {e}", flush=True)
-
-def run_training(model_type, config_path):
-    # Ensure tokenizers are ready for offline sd-scripts
-    if model_type in ["sdxl", "flux", "z-image", "qwen-image"]:
-        ensure_offline_tokenizers()
-    
+def run_training(model_type, config_path, output_dir):
     print(f"Starting training with config: {config_path}", flush=True)
-    
-    is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
-    
-    if is_ai_toolkit:
-        training_command = [
-            "python3",
-            "/app/ai-toolkit/run.py",
-            config_path
-        ]
-        # AI-TOOLKIT 
-        env = os.environ.copy()
-        env["HF_DATASETS_OFFLINE"] = "1"
-        env["TRANSFORMERS_OFFLINE"] = "1"
-        env["HF_HUB_OFFLINE"] = "1"
-    else:
-        if model_type == "sdxl":
-            training_command = [
-                "accelerate", "launch",
-                "--dynamo_backend", "no",
-                "--dynamo_mode", "default",
-                "--mixed_precision", "bf16",
-                "--num_processes", "1",
-                "--num_machines", "1",
-                "--num_cpu_threads_per_process", "2",
-                f"/app/sd-scripts/{model_type}_train_network.py",
-                "--config_file", config_path,
-                "--tokenizer_cache_dir", train_cst.HUGGINGFACE_CACHE_PATH
-            ]
-        elif model_type == "flux":
-            training_command = [
-                "accelerate", "launch",
-                "--dynamo_backend", "no",
-                "--dynamo_mode", "default",
-                "--mixed_precision", "bf16",
-                "--num_processes", "1",
-                "--num_machines", "1",
-                "--num_cpu_threads_per_process", "2",
-                f"/app/sd-scripts/{model_type}_train_network.py",
-                "--config_file", config_path,
-                "--tokenizer_cache_dir", train_cst.HUGGINGFACE_CACHE_PATH
-            ]
-    
-    try:
-        env = os.environ.copy()
-        env["HF_HOME"] = train_cst.HUGGINGFACE_CACHE_PATH
-        env["PYTHONUNBUFFERED"] = "1"
-        
-        # --- OFFLINE HUB GUARD (CRITICAL) ---
-        env["HF_DATASETS_OFFLINE"] = "1"
-        env["TRANSFORMERS_OFFLINE"] = "1"
-        env["HF_HUB_OFFLINE"] = "1"
 
-        print(f"🚀 Launching {model_type.upper()} training with command: {' '.join(training_command)}", flush=True)
+    is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
+    env = os.environ.copy()
+    env.update({
+        "HF_HOME": train_cst.HUGGINGFACE_CACHE_PATH,
+        "PYTHONUNBUFFERED": "1"
+    })
+
+    if is_ai_toolkit:
+        training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
+    else:
+        training_command = [
+            "accelerate", "launch",
+            "--dynamo_backend", "no",
+            "--dynamo_mode", "default",
+            "--mixed_precision", "bf16",
+            "--num_processes", "1",
+            "--num_machines", "1",
+            "--num_cpu_threads_per_process", "2",
+            f"/app/sd-scripts/{model_type}_train_network.py",
+            "--config_file", config_path
+        ]
+
+    try:
+        print(f"Launching {model_type.upper()} training with command: {' '.join(training_command)}", flush=True)
         process = subprocess.Popen(
             training_command,
             stdout=subprocess.PIPE,
@@ -704,34 +546,25 @@ def run_training(model_type, config_path):
             raise subprocess.CalledProcessError(return_code, training_command)
 
         print("Training subprocess completed successfully.", flush=True)
-        
-        # --- FIX: MOVE FILE IF SAVED IN WRONG LOCATION ---
-        try:
-            # Parse config to get intended output directory
-            intended_output_dir = None
-            if config_path.endswith(".toml"):
-                import toml
-                with open(config_path, "r") as f:
-                    c = toml.load(f)
-                    intended_output_dir = c.get("output_dir")
-            
-            if intended_output_dir:
-                default_loc = "/app/checkpoints/last.safetensors"
-                if os.path.exists(default_loc):
-                    print(f"[FIX] Moving checkpoint from {default_loc} to {intended_output_dir}", flush=True)
-                    os.makedirs(intended_output_dir, exist_ok=True)
-                    import shutil
-                    shutil.move(default_loc, os.path.join(intended_output_dir, "last.safetensors"))
-                    print(f"[FIX] Successfully moved to {intended_output_dir}/last.safetensors", flush=True)
-        except Exception as e:
-            print(f"[FIX] Error moving checkpoint: {e}", flush=True)
-        # ------------------------------------------------
 
     except subprocess.CalledProcessError as e:
         print("Training subprocess failed!", flush=True)
         print(f"Exit Code: {e.returncode}", flush=True)
         print(f"Command: {' '.join(e.cmd) if isinstance(e.cmd, list) else e.cmd}", flush=True)
         raise RuntimeError(f"Training subprocess failed with exit code {e.returncode}")
+
+    # --- FIX: MOVE FILE IF SAVED IN WRONG LOCATION ---
+    if output_dir:
+        try:
+            default_loc = "/app/checkpoints/last.safetensors"
+            if os.path.exists(default_loc):
+                print(f"[FIX] Moving checkpoint from {default_loc} to {output_dir}", flush=True)
+                os.makedirs(output_dir, exist_ok=True)
+                shutil.move(default_loc, os.path.join(output_dir, "last.safetensors"))
+                print(f"[FIX] Successfully moved to {output_dir}/last.safetensors", flush=True)
+        except Exception as e:
+            print(f"[FIX] Error moving checkpoint: {e}", flush=True)
+    # ------------------------------------------------
 
 def hash_model(model: str) -> str:
     model_bytes = model.encode('utf-8')
@@ -740,9 +573,9 @@ def hash_model(model: str) -> str:
 
 async def main():
     print("--------------------------------------------------", flush=True)
-    print("🚀 EMPIRE STANDALONE TRAINER V2.0 (OFFLINE PATCHED)", flush=True)
+    print("ING MADYA MANGUN KARSA", flush=True)
     print("--------------------------------------------------", flush=True)
-    print("---STARTING IMAGE TRAINING SCRIPT---", flush=True)
+    print("---STARTING TRAINING SCRIPT AKA JORDANSKY---", flush=True)
     # PARSE COMMAND LINE ARGUMENTS
     parser = argparse.ArgumentParser(description="Image Model Training Script")
     parser.add_argument("--task-id", required=True, help="Task ID")
@@ -770,7 +603,7 @@ async def main():
         output_dir=train_cst.IMAGE_CONTAINER_IMAGES_PATH
     )
 
-    config_path = create_config(
+    config_path, output_dir = create_config(
         args.task_id,
         model_path,
         args.model,
@@ -779,7 +612,7 @@ async def main():
         args.trigger_word,
     )
 
-    run_training(args.model_type, config_path)
+    run_training(args.model_type, config_path, output_dir)
 
 
 if __name__ == "__main__":

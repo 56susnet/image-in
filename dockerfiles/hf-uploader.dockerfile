@@ -1,8 +1,7 @@
 FROM python:3.10-slim
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git curl git-lfs && \
-    apt-get clean && \
+    apt-get install -y git curl git-lfs && \
     rm -rf /var/lib/apt/lists/* && \
     git lfs install
 

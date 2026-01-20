@@ -25,7 +25,7 @@ def patch_model_metadata(output_dir: str, base_model_id: str):
 
             print(f"Updated adapter_config.json with base_model: {base_model_id}", flush=True)
         else:
-            print(" adapter_config.json not found", flush=True)
+            pass
 
         readme_path = os.path.join(output_dir, "README.md")
 
@@ -45,7 +45,7 @@ def patch_model_metadata(output_dir: str, base_model_id: str):
 
             print(f"Updated README.md with base_model: {base_model_id}", flush=True)
         else:
-            print("README.md not found", flush=True)
+            pass
 
     except Exception as e:
         print(f"Error updating metadata: {e}", flush=True)
@@ -107,7 +107,7 @@ def main():
     repo_id = f"{hf_user}/{repo_name}"
 
     # FLATTEN: Ensure ALL essential files are in root of local_folder
-    print("Flattener: Moving essential files to root...", flush=True)
+    # Flattener: Ensure ALL essential files are in root of local_folder
     for root, dirs, files in os.walk(local_folder):
         for file in files:
             if file.endswith((".safetensors", ".json", ".md")):

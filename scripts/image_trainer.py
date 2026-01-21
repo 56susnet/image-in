@@ -234,15 +234,14 @@ def load_lrs_config(model_type: str, is_style: bool) -> dict:
 
 
 def detect_is_style(train_data_dir):
-    """Detect if the dataset contains style-based prompts using image-yaya logic."""
+    """Detect if the dataset contains style-based prompts using balanced logic."""
     try:
-        # Standard location for captions in our dataset structure
-        # In our script, the dataset is extracted to train_data_dir/{repeats}_lora style/
         sub_dirs = [d for d in os.listdir(train_data_dir) if os.path.isdir(os.path.join(train_data_dir, d))]
         prompts = []
         
         for sub in sub_dirs:
-            if "lora style" in sub.lower():
+            # Check all subdirectories starting with numbers (repeats)
+            if "_" in sub and sub.split("_")[0].isdigit():
                 prompts_path = os.path.join(train_data_dir, sub)
                 for file in os.listdir(prompts_path):
                     if file.endswith(".txt"):
@@ -252,21 +251,39 @@ def detect_is_style(train_data_dir):
         if not prompts:
             return False
 
-        # Common style keywords from champion list
+        # Keywords that strongly indicate a PERSON task
+        person_keywords = ["man", "woman", "girl", "boy", "person", "lady", "gentleman", "male", "female", "guy", "people", "portrait"]
+        
+        # Keywords that strongly indicate a STYLE task
         style_keywords = [
-            "painting", "art", "sketch", "comic", "cyberpunk", "steampunk", "impressionist", 
-            "minimalist", "gothic", "pixel art", "anime", "3d render", "photorealistic", 
-            "vector", "abstract", "realism", "illustration", "drawing", "manga", "vintage",
-            "watercolor", "digital art", "pencil sketch", "oil painting", "pop art"
+            "painting", "art style", "sketch", "comic", "cyberpunk", "steampunk", "impressionist", 
+            "minimalist", "gothic", "pixel art", "anime style", "3d render", "vector art", 
+            "abstract", "illustration", "manga", "watercolor", "digital art", "pop art"
         ]
         
+        person_count = 0
         style_count = 0
-        for prompt in prompts:
-            if any(keyword in prompt for keyword in style_keywords):
-                style_count += 1
         
-        # If > 25% of prompts have style keywords, it's a style task
-        return (style_count / len(prompts)) >= 0.25
+        for prompt in prompts:
+            is_person = any(re.search(rf"\b{word}\b", prompt) for word in person_keywords)
+            is_style = any(re.search(rf"\b{word}\b", prompt) for word in style_keywords)
+            
+            if is_person: person_count += 1
+            if is_style: style_count += 1
+        
+        prompt_total = len(prompts)
+        person_ratio = person_count / prompt_total
+        style_ratio = style_count / prompt_total
+        
+        print(f"DEBUG_CLASSIFY: Person Ratio: {person_ratio:.2f}, Style Ratio: {style_ratio:.2f}", flush=True)
+
+        # LOGIC: If person keywords are present in > 20% of prompts, it's almost certainly a PERSON task
+        if person_ratio >= 0.20:
+            return False
+            
+        # If it's not a person task and style keywords are present in > 25% of prompts, it's a STYLE task
+        return style_ratio >= 0.25
+        
     except Exception as e:
         print(f"Warning during style detection: {e}", flush=True)
         return False

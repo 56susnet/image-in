@@ -579,13 +579,23 @@ def run_training(model_type, config_path, output_dir, dataset_size):
         last_epoch_avg = None
         stop_triggered = False
         last_processed_step = -1
+        patience_counter = 0
+        max_patience = 8 # Increased patience for more robustness
+        
+        # --- EMPIRE WINNING MATH ---
+        # champion benchmarks show active learning up to 300-350 steps.
+        # We enforce a hard floor to prevent underfitting.
+        if dataset_size <= 20:
+            hard_min_steps = 300
+            stop_threshold = 0.00005 # 10x tighter to reach 0.03 range
+        else:
+            hard_min_steps = 450
+            stop_threshold = 0.00003
 
         for line in process.stdout:
             print(line, end="", flush=True)
             
             # --- PARSE LOSS & STEP ---
-            # Pattern Kohya: steps:  10%|█         | 5/50 [00:20<03:00,  4.10s/it, avr_loss=0.0952]
-            # Pattern AI-Toolkit: Step 5/50: Loss: 0.0952
             current_loss = None
             current_step = -1
             
@@ -593,14 +603,12 @@ def run_training(model_type, config_path, output_dir, dataset_size):
                 if "avr_loss=" in line:
                     loss_str = line.split("avr_loss=")[-1].split("]")[0].strip()
                     current_loss = float(loss_str)
-                    # Extract step from Kohya pattern: "steps:  10%|█ | 5/50"
                     step_part = line.split("|")[-1].split("[")[0].strip()
                     if "/" in step_part:
                         current_step = int(step_part.split("/")[0].strip())
                 elif "Loss:" in line:
                     loss_str = line.split("Loss:")[-1].strip().split(" ")[0].strip()
                     current_loss = float(loss_str)
-                    # Extract step from AI-Toolkit pattern: "Step 5/50"
                     if "Step" in line:
                         step_part = line.split("Step")[-1].split(":")[0].strip()
                         if "/" in step_part:
@@ -613,26 +621,32 @@ def run_training(model_type, config_path, output_dir, dataset_size):
                 try:
                     current_epoch_losses.append(current_loss)
                     
-                    # JAE Warmup: Don't stop before 50 steps to allow loss to stabilize
-                    if current_step < 50:
+                    # JAE Warmup: CHAMPION FLOOR (No exit before 300 steps)
+                    if current_step < hard_min_steps:
                         continue
 
-                    # Evaluate every 'steps_per_epoch' window
-                    steps_per_epoch = max(10, int(dataset_size * 5 / 4))
+                    # Evaluate window
+                    steps_per_epoch = max(15, int(dataset_size * 5 / 4))
                     if len(current_epoch_losses) >= steps_per_epoch:
                         avg_loss = sum(current_epoch_losses) / len(current_epoch_losses)
                         
                         if last_epoch_avg is not None:
                             delta = last_epoch_avg - avg_loss
                             
-                            # Decision logic: Stop if improvement is positive but smaller than threshold
-                            # Or if it's clearly oscillating/overfitting (negative delta) AFTER warmup
-                            if delta < stop_threshold:
-                                print(f"\n[JAE SIGNAL] Convergence/Overfit Detected at step {current_step}! Delta {delta:.5f} < Threshold {stop_threshold}", flush=True)
-                                print(f"[JAE SIGNAL] Requesting graceful save and exit...", flush=True)
-                                stop_triggered = True
-                                process.send_signal(signal.SIGINT)
-                                break
+                            # Decision logic: Only stop if delta is tiny AND loss is already low (~under 0.06)
+                            # This avoids stopping at high-loss plateaus.
+                            if delta < stop_threshold and avg_loss < 0.06:
+                                patience_counter += 1
+                                print(f"\n[JAE PATIENCE] Step {current_step}: Signal {delta:.6f} < {stop_threshold}. Patience: {patience_counter}/{max_patience}", flush=True)
+                                
+                                if patience_counter >= max_patience:
+                                    print(f"[JAE SIGNAL] Champion convergence reached at step {current_step}! Loss: {avg_loss:.4f}", flush=True)
+                                    print(f"[JAE SIGNAL] Requesting graceful save and exit...", flush=True)
+                                    stop_triggered = True
+                                    process.send_signal(signal.SIGINT)
+                                    break
+                            else:
+                                patience_counter = 0
                         
                         last_epoch_avg = avg_loss
                         current_epoch_losses = [] 
@@ -654,17 +668,39 @@ def run_training(model_type, config_path, output_dir, dataset_size):
         print(f"Command: {' '.join(e.cmd) if isinstance(e.cmd, list) else e.cmd}", flush=True)
         raise RuntimeError(f"Training subprocess failed with exit code {e.returncode}")
 
-    # --- FIX: MOVE FILE IF SAVED IN WRONG LOCATION ---
+    # --- FIX: HUNTER MODE (Find and move the best checkpoint) ---
     if output_dir:
         try:
-            default_loc = "/app/checkpoints/last.safetensors"
+            os.makedirs(output_dir, exist_ok=True)
+            search_dir = "/app/checkpoints"
+            found_checkpoint = None
+            
+            # 1. Check default location
+            default_loc = os.path.join(search_dir, "last.safetensors")
             if os.path.exists(default_loc):
-                print(f"[FIX] Moving checkpoint from {default_loc} to {output_dir}", flush=True)
-                os.makedirs(output_dir, exist_ok=True)
-                shutil.move(default_loc, os.path.join(output_dir, "last.safetensors"))
-                print(f"[FIX] Successfully moved to {output_dir}/last.safetensors", flush=True)
+                found_checkpoint = default_loc
+            else:
+                # 2. Hunter Mode: Search for any safetensors file in search_dir
+                print(f"[HUNTER] Looking for checkpoints in {search_dir}...", flush=True)
+                for root, _, files in os.walk(search_dir):
+                    if root == output_dir: continue # Don't search in target
+                    for file in files:
+                        if file.endswith(".safetensors") and "last" in file.lower():
+                            found_checkpoint = os.path.join(root, file)
+                            break
+                    if found_checkpoint: break
+            
+            if found_checkpoint:
+                target_path = os.path.join(output_dir, "last.safetensors")
+                if found_checkpoint != target_path:
+                    print(f"[FIX] Found checkpoint at {found_checkpoint}. Moving to {target_path}", flush=True)
+                    shutil.move(found_checkpoint, target_path)
+                    print(f"[FIX] Successfully moved to {target_path}", flush=True)
+            else:
+                print(f"[WARNING] No checkpoint (.safetensors) found in {search_dir} after training!", flush=True)
+                
         except Exception as e:
-            print(f"[FIX] Error moving checkpoint: {e}", flush=True)
+            print(f"[FIX] Error in Hunter Mode: {e}", flush=True)
     # ------------------------------------------------
 
 def hash_model(model: str) -> str:

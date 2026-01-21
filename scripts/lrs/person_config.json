@@ -240,7 +240,9 @@
       ],
       "small": {
         "max_train_epochs": 100,
-        "unet_lr": 4e-5
+        "learning_rate": 1.0,
+        "unet_lr": 1.0,
+        "text_encoder_lr": 1.0
       },
       "medium": {
         "max_train_epochs": 80,

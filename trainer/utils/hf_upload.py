@@ -102,12 +102,18 @@ def main():
     if not all([hf_token, hf_user, task_id, repo_name]):
         raise RuntimeError("Missing one or more required environment variables")
 
+    # VALIDATION: Local folder must exist (from image-yaya)
+    if not local_folder:
+        raise RuntimeError("LOCAL_FOLDER environment variable is not set")
+    if not os.path.isdir(local_folder):
+        raise FileNotFoundError(f"Local folder {local_folder} does not exist")
+
     login(token=hf_token)
 
     repo_id = f"{hf_user}/{repo_name}"
 
     # FLATTEN: Ensure ALL essential files are in root of local_folder
-    # Flattener: Ensure ALL essential files are in root of local_folder
+    print(f"Flattening checkpoint files in {local_folder}...", flush=True)
     for root, dirs, files in os.walk(local_folder):
         for file in files:
             if file.endswith((".safetensors", ".json", ".md")):
@@ -117,7 +123,14 @@ def main():
                     try:
                         shutil.move(src_path, dst_path)
                         print(f"Moved {file} to root", flush=True)
-                    except: pass
+                    except Exception as e:
+                        print(f"Warning: Failed to move {file}: {e}", flush=True)
+
+    # VALIDATION: Checkpoint must exist after flattening (critical for validator)
+    checkpoint_files = [f for f in os.listdir(local_folder) if f.endswith('.safetensors')]
+    if not checkpoint_files:
+        raise FileNotFoundError(f"No .safetensors checkpoint found in {local_folder} after flattening. Training may have failed.")
+    print(f"Found checkpoint(s): {', '.join(checkpoint_files)}", flush=True)
 
     # AUTO-CORRECT: If SDXL, use official base model ID for validator
     target_model = model

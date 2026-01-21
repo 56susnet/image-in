@@ -149,29 +149,49 @@ def get_dataset_size_category(dataset_size: int) -> str:
         return "large"
 
 
-def get_config_for_model(lrs_config: dict, model_name: str, dataset_size: int = None) -> dict:
+def get_config_for_model(lrs_config: dict, model_hash: str, dataset_size: int = None, raw_model_name: str = None) -> dict:
     if not isinstance(lrs_config, dict):
         return None
 
     data = lrs_config.get("data")
     default_config = lrs_config.get("default", {})
+    
+    target_config = None
 
-    if isinstance(data, dict) and model_name in data:
-        model_config = data.get(model_name)
-        
+    # 1. Try Hash Lookup
+    if isinstance(data, dict):
+        if model_hash in data:
+            target_config = data.get(model_hash)
+            print(f"LRS: Found config via Hash: {model_hash}", flush=True)
+        # 2. Try Raw Name Lookup (Fallback)
+        elif raw_model_name:
+             print(f"LRS: Hash lookup failed. Trying fallback lookup for: {raw_model_name}", flush=True)
+             # Direct lookup
+             if raw_model_name in data:
+                 target_config = data.get(raw_model_name)
+                 print(f"LRS: Found config via Direct Name Key", flush=True)
+             else:
+                 # Iterative lookup (scan 'model_name' field)
+                 for key, val in data.items():
+                     if isinstance(val, dict) and val.get("model_name") == raw_model_name:
+                         target_config = val
+                         print(f"LRS: Found config via 'model_name' field match in key: {key}", flush=True)
+                         break
+
+    if target_config:
         # If dataset_size provided and model_config has size categories, merge them
-        if dataset_size is not None and isinstance(model_config, dict):
+        if dataset_size is not None and isinstance(target_config, dict):
             size_category = get_dataset_size_category(dataset_size)
             
             # Check if model_config has size-specific settings
-            if size_category in model_config:
-                size_specific_config = model_config.get(size_category, {})
+            if size_category in target_config:
+                size_specific_config = target_config.get(size_category, {})
                 # Merge Config
-                base_model_config = {k: v for k, v in model_config.items() if k not in ["small", "medium", "large"]}
+                base_model_config = {k: v for k, v in target_config.items() if k not in ["small", "medium", "large"]}
                 merged = merge_model_config(default_config, base_model_config)
                 return merge_model_config(merged, size_specific_config)
         
-        return merge_model_config(default_config, model_config)
+        return merge_model_config(default_config, target_config)
 
     if default_config:
         return default_config
@@ -305,7 +325,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     lrs_config = load_lrs_config(model_type, is_style)
     if lrs_config:
         model_hash = hash_model(model_name)
-        lrs_settings = get_config_for_model(lrs_config, model_hash, dataset_size)
+        lrs_settings = get_config_for_model(lrs_config, model_hash, dataset_size, model_name)
 
     if dataset_size > 0:
         size_config = load_size_based_config(model_type, is_style, dataset_size)

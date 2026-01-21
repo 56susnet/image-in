@@ -297,8 +297,7 @@
       "model_name": "ehristoforu/Visionix-alpha",
       "small": {
         "prior_loss_weight": 0.75,
-        "min_snr_gamma": 6,
-        "max_train_epochs": 2
+        "min_snr_gamma": 6
       },
       "medium": {
         "prior_loss_weight": 0.8,

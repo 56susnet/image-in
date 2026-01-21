@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-# VOOR (Jordansky)
+# ING MADYA MANGUN KARSA
 """
 
 import argparse
@@ -573,7 +573,7 @@ def hash_model(model: str) -> str:
 
 async def main():
     print("--------------------------------------------------", flush=True)
-    print("GOD WITH US", flush=True)
+    print("ONLY NINJA CAN STOP ME NOW", flush=True)
     print("--------------------------------------------------", flush=True)
     print("---STARTING TRAINING ---", flush=True)
     # PARSE COMMAND LINE ARGUMENTS

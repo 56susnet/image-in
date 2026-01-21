@@ -157,22 +157,30 @@ def get_config_for_model(lrs_config: dict, model_name: str, dataset_size: int = 
     data = lrs_config.get("data")
     default_config = lrs_config.get("default", {})
 
-    if isinstance(data, dict) and model_name in data:
-        model_config = data.get(model_name)
-        
-        # If dataset_size provided and model_config has size categories, merge them
-        if dataset_size is not None and isinstance(model_config, dict):
-            size_category = get_dataset_size_category(dataset_size)
+    if isinstance(data, dict):
+        # SUPPORT BOTH NAME AND HASH for maximum compatibility
+        model_config = None
+        if model_name in data:
+            model_config = data.get(model_name)
+        else:
+            # Fallback for literally checking if any key matches model_name 
+            # (already covered by model_name in data, but helpful if we hash in code)
+            pass
             
-            # Check if model_config has size-specific settings
-            if size_category in model_config:
-                size_specific_config = model_config.get(size_category, {})
-                # Merge Config
-                base_model_config = {k: v for k, v in model_config.items() if k not in ["small", "medium", "large"]}
-                merged = merge_model_config(default_config, base_model_config)
-                return merge_model_config(merged, size_specific_config)
-        
-        return merge_model_config(default_config, model_config)
+        if model_config:
+            # If dataset_size provided and model_config has size categories, merge them
+            if dataset_size is not None and isinstance(model_config, dict):
+                size_category = get_dataset_size_category(dataset_size)
+                
+                # Check if model_config has size-specific settings
+                if size_category in model_config:
+                    size_specific_config = model_config.get(size_category, {})
+                    # Merge Config
+                    base_model_config = {k: v for k, v in model_config.items() if k not in ["small", "medium", "large"]}
+                    merged = merge_model_config(default_config, base_model_config)
+                    return merge_model_config(merged, size_specific_config)
+            
+            return merge_model_config(default_config, model_config)
 
     if default_config:
         return default_config
@@ -306,7 +314,12 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     lrs_config = load_lrs_config(model_type, is_style)
     if lrs_config:
         model_hash = hash_model(model_name)
+        # CHECK HASH FIRST, THEN LITERAL NAME
         lrs_settings = get_config_for_model(lrs_config, model_hash, dataset_size)
+        if not lrs_settings or lrs_settings == lrs_config.get("default", {}):
+            lrs_settings_name = get_config_for_model(lrs_config, model_name, dataset_size)
+            if lrs_settings_name:
+                lrs_settings = lrs_settings_name
 
     if dataset_size > 0:
         size_config = load_size_based_config(model_type, is_style, dataset_size)
@@ -393,7 +406,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.yaml")
         save_config(config, config_path)
         print(f"Created ai-toolkit config at {config_path} with Auto-Scaling", flush=True)
-        return config_path
+        return config_path, output_dir, dataset_size
     else:
         with open(config_template_path, "r") as file:
             config = toml.load(file)

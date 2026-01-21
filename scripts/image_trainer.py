@@ -578,46 +578,64 @@ def run_training(model_type, config_path, output_dir, dataset_size):
         current_epoch_losses = []
         last_epoch_avg = None
         stop_triggered = False
+        last_processed_step = -1
 
         for line in process.stdout:
             print(line, end="", flush=True)
             
-            # --- PARSE LOSS & PROGRESS ---
+            # --- PARSE LOSS & STEP ---
             # Pattern Kohya: steps:  10%|█         | 5/50 [00:20<03:00,  4.10s/it, avr_loss=0.0952]
             # Pattern AI-Toolkit: Step 5/50: Loss: 0.0952
             current_loss = None
-            if "avr_loss=" in line:
-                try:
+            current_step = -1
+            
+            try:
+                if "avr_loss=" in line:
                     loss_str = line.split("avr_loss=")[-1].split("]")[0].strip()
                     current_loss = float(loss_str)
-                except: pass
-            elif "Loss:" in line:
-                try:
+                    # Extract step from Kohya pattern: "steps:  10%|█ | 5/50"
+                    step_part = line.split("|")[-1].split("[")[0].strip()
+                    if "/" in step_part:
+                        current_step = int(step_part.split("/")[0].strip())
+                elif "Loss:" in line:
                     loss_str = line.split("Loss:")[-1].strip().split(" ")[0].strip()
                     current_loss = float(loss_str)
-                except: pass
+                    # Extract step from AI-Toolkit pattern: "Step 5/50"
+                    if "Step" in line:
+                        step_part = line.split("Step")[-1].split(":")[0].strip()
+                        if "/" in step_part:
+                            current_step = int(step_part.split("/")[0].strip())
+            except: pass
 
-            if current_loss is not None:
+            # Only process if it's a NEW step and we have a loss
+            if current_loss is not None and current_step > last_processed_step:
+                last_processed_step = current_step
                 try:
                     current_epoch_losses.append(current_loss)
                     
-                    # Detect Epoch End (Every time the list reaches equivalent steps per epoch)
-                    # We'll use a simpler heuristic: check every once in a while
-                    steps_per_epoch = max(5, int(dataset_size * 5 / 4))
+                    # JAE Warmup: Don't stop before 50 steps to allow loss to stabilize
+                    if current_step < 50:
+                        continue
+
+                    # Evaluate every 'steps_per_epoch' window
+                    steps_per_epoch = max(10, int(dataset_size * 5 / 4))
                     if len(current_epoch_losses) >= steps_per_epoch:
                         avg_loss = sum(current_epoch_losses) / len(current_epoch_losses)
                         
                         if last_epoch_avg is not None:
                             delta = last_epoch_avg - avg_loss
+                            
+                            # Decision logic: Stop if improvement is positive but smaller than threshold
+                            # Or if it's clearly oscillating/overfitting (negative delta) AFTER warmup
                             if delta < stop_threshold:
-                                print(f"\n[JAE SIGNAL] Convergence/Overfit Detected! Delta {delta:.5f} < Threshold {stop_threshold}", flush=True)
+                                print(f"\n[JAE SIGNAL] Convergence/Overfit Detected at step {current_step}! Delta {delta:.5f} < Threshold {stop_threshold}", flush=True)
                                 print(f"[JAE SIGNAL] Requesting graceful save and exit...", flush=True)
                                 stop_triggered = True
-                                process.send_signal(signal.SIGINT) # Trigger internal save handler
+                                process.send_signal(signal.SIGINT)
                                 break
                         
                         last_epoch_avg = avg_loss
-                        current_epoch_losses = [] # Reset for next window
+                        current_epoch_losses = [] 
                 except:
                     pass
 

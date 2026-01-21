@@ -65,7 +65,7 @@
                 0.0
             ],
             "small": {
-                "max_train_epochs": 50,
+                "max_train_epochs": 2,
                 "unet_lr": 0.00008
             },
             "medium": {

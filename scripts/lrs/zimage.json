@@ -1,24 +1,34 @@
 ﻿{
-    "default": {
-        "optimizer": "adamw8bit",
-        "lr": 1e-5,
-        "weight_decay": 0.01
-    },
+    "default": {},
     "data": {
         "zimage_turbo": {
             "model_name": "Z-Image-Turbo-V2",
             "small": {
-                "unet_lr": 2e-5,
-                "learning_rate": 2e-5
+                "lr": 1.2e-4,
+                "steps": 600,
+                "save_every": 150,
+                "ema_config": {
+                    "use_ema": true,
+                    "ema_decay": 0.995
+                }
             },
             "medium": {
-                "unet_lr": 1e-5,
-                "learning_rate": 1e-5
+                "lr": 1e-4,
+                "steps": 1200,
+                "save_every": 300,
+                "ema_config": {
+                    "use_ema": true,
+                    "ema_decay": 0.99
+                }
             },
             "large": {
-                "unet_lr": 8e-6,
-                "learning_rate": 8e-6,
-                "weight_decay": 0.02
+                "lr": 8e-5,
+                "steps": 1800,
+                "save_every": 450,
+                "ema_config": {
+                    "use_ema": true,
+                    "ema_decay": 0.985
+                }
             }
         }
     }

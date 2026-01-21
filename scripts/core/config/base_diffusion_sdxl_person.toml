@@ -24,6 +24,8 @@ network_alpha = 32
 
 optimizer_type = "prodigy"
 learning_rate = 1.0
+unet_lr = 1.0
+text_encoder_lr = 1.0
 max_grad_norm = 1.0
 optimizer_args = ["decouple=True", "d_coef=1", "weight_decay=0.01", "use_bias_correction=True", "safeguard_warmup=True"]
 lr_scheduler = "constant"

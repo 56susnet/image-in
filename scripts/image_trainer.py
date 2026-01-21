@@ -502,9 +502,14 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
             section_map["optimizer_args"] = (None, "optimizer_args")
 
         # Apply Overrides (Priority: Autoepoch < LRS)
-        configs_to_apply = [cfg for cfg in [size_config, lrs_settings] if cfg]
-        
-        for cfg in configs_to_apply:
+        # Order: Apply size_config first, then LRS to let LRS win.
+        configs_to_apply = []
+        if size_config:
+            configs_to_apply.append(("Size-Based", size_config))
+        if lrs_settings:
+            configs_to_apply.append(("LRS-Override", lrs_settings))
+            
+        for name, cfg in configs_to_apply:
             for key, value in cfg.items():
                 if key in section_map:
                     sec, target = section_map[key]
@@ -515,13 +520,11 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                         config[target] = value
                 else:
                     # Direct injection for root keys (max_train_epochs, train_batch_size, etc.)
-                    config[key] = value
-                    
-                    # 
                     if key == "max_train_epochs":
+                        print(f"   [OVERRIDE] Setting {key} = {value} from {name}", flush=True)
                         if "max_train_steps" in config:
-                            print(f"   [COHERENCE] Clearing max_train_steps to prioritize epoch scaling ({value} epochs)", flush=True)
                             del config["max_train_steps"]
+                    config[key] = value
 
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)

@@ -141,12 +141,16 @@ def load_size_based_config(model_type: str, is_style: bool, dataset_size: int) -
 
 
 def get_dataset_size_category(dataset_size: int) -> str:
+    """Map dataset size to category labels used in LRS config."""
     if dataset_size <= 20:
-        return "small"
+        cat = "small"
     elif dataset_size <= 40:
-        return "medium"
+        cat = "medium"
     else:
-        return "large"
+        cat = "large"
+    
+    print(f"DEBUG_LRS: Image count {dataset_size} mapped to category -> [{cat.upper()}]", flush=True)
+    return cat
 
 
 def get_config_for_model(lrs_config: dict, model_hash: str, dataset_size: int = None, raw_model_name: str = None) -> dict:
@@ -229,18 +233,71 @@ def load_lrs_config(model_type: str, is_style: bool) -> dict:
         return None
 
 
+def detect_is_style(train_data_dir):
+    """Detect if the dataset contains style-based prompts using image-yaya logic."""
+    try:
+        # Standard location for captions in our dataset structure
+        # In our script, the dataset is extracted to train_data_dir/{repeats}_lora style/
+        sub_dirs = [d for d in os.listdir(train_data_dir) if os.path.isdir(os.path.join(train_data_dir, d))]
+        prompts = []
+        
+        for sub in sub_dirs:
+            if "lora style" in sub.lower():
+                prompts_path = os.path.join(train_data_dir, sub)
+                for file in os.listdir(prompts_path):
+                    if file.endswith(".txt"):
+                        with open(os.path.join(prompts_path, file), "r", encoding='utf-8') as f:
+                            prompts.append(f.read().strip().lower())
+        
+        if not prompts:
+            return False
+
+        # Common style keywords from champion list
+        style_keywords = [
+            "painting", "art", "sketch", "comic", "cyberpunk", "steampunk", "impressionist", 
+            "minimalist", "gothic", "pixel art", "anime", "3d render", "photorealistic", 
+            "vector", "abstract", "realism", "illustration", "drawing", "manga", "vintage",
+            "watercolor", "digital art", "pencil sketch", "oil painting", "pop art"
+        ]
+        
+        style_count = 0
+        for prompt in prompts:
+            if any(keyword in prompt for keyword in style_keywords):
+                style_count += 1
+        
+        # If > 25% of prompts have style keywords, it's a style task
+        return (style_count / len(prompts)) >= 0.25
+    except Exception as e:
+        print(f"Warning during style detection: {e}", flush=True)
+        return False
 def create_config(task_id, model_path, model_name, model_type, expected_repo_name, trigger_word):
-    is_style = "style" in model_name.lower() or "style" in task_id.lower()
     train_data_dir = os.path.join(train_cst.IMAGE_CONTAINER_IMAGES_PATH, task_id)
+    
+    # --- TASK CLASSIFICATION ---
+    # 1. SMART DETECTION (Dataset-based - The Champion's Way)
+    is_style = detect_is_style(train_data_dir)
+    detection_method = "Dataset-driven"
+    
+    # 2. FALLBACK DETECTION (Metadata-based)
+    if not is_style:
+        meta_style = "style" in model_name.lower() or "style" in task_id.lower() or (expected_repo_name and "style" in expected_repo_name.lower())
+        if meta_style:
+            is_style = True
+            detection_method = "Metadata-driven"
+        else:
+            detection_method = "Default (Person)"
+
+    task_type = "style" if is_style else "person"
+    print(f"DEBUG_TYPE: Task detected as [{task_type.upper()}] via {detection_method}", flush=True)
+
     dataset_size = count_images_in_directory(train_data_dir)
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
     output_dir = train_paths.get_checkpoints_output_path(task_id, expected_repo_name or "output")
     
-    # UNIFIED CONFIG RESOLUTION (PERSIMPLE)
+    # UNIFIED CONFIG RESOLUTION
     config_dir = os.path.join(script_dir, "core", "config")
-    task_type = "style" if is_style else "person"
     
-    # TASK SPESIFIC
+    # TASK SPECIFIC TEMPLATE
     potential_templates = [
         f"base_diffusion_{model_type}_{task_type}.toml",
         f"base_diffusion_{model_type}_{task_type}.yaml",
@@ -326,14 +383,16 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
 
     print(f"[CONFIG SPESIFICATION - LAYER II] Model '{model_name}' Rank {net_dim}", flush=True)
 
-    # --- OVERRIDES (LRS & AUTOEPOCH) ---
+    # --- LRS & OVERRIDES ---
     lrs_settings = None
     size_config = None
     
     lrs_config = load_lrs_config(model_type, is_style)
     if lrs_config:
-        model_hash = hash_model(model_name)
-        lrs_settings = get_config_for_model(lrs_config, model_hash, dataset_size, model_name)
+        # Sanitize model name for robust hashing
+        clean_model_name = model_name.strip().strip("'").strip('"')
+        model_hash = hash_model(clean_model_name)
+        lrs_settings = get_config_for_model(lrs_config, model_hash, dataset_size, clean_model_name)
 
     if dataset_size > 0:
         size_config = load_size_based_config(model_type, is_style, dataset_size)
@@ -377,10 +436,14 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                 # --- ADVANCED AUTO-SCALING (JORDANSKY TUNING) ---
                 if 'train' not in process: process['train'] = {}
                 
+                # Determine repeats factor for relative step calculation
+                rep_factor = cst.DIFFUSION_SDXL_REPEATS if model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS
+                
                 def calculate_steps(epochs):
                     batch_size = process.get('train', {}).get('batch_size', 1)
                     if dataset_size == 0: return epochs
-                    return int(epochs * (dataset_size / batch_size))
+                    # Actual steps = Epochs * (Images * Repeats / Batch)
+                    return int(epochs * (dataset_size * rep_factor / batch_size))
 
                 # 1. APPLY AE (SIZE-BASED DEFAULTS)
                 if size_config:

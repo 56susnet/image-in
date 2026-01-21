@@ -550,7 +550,7 @@
         "min_snr_gamma": 7
       }
     },
-    "e7d0cc3356bd946337fb5e22fcff6132c7eb363abded9d32a99e42145a90309f": {
+    "f96d19c00b73c24237f394460f1bfa7079207e0594f86d639b7ea75e54c7d23d": {
       "model_name": "GHArt/Lah_Mysterious_SDXL_V4.0_xl_fp16",
       "small": {
         "prior_loss_weight": 0.75,

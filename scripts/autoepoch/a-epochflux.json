@@ -1,11 +1,31 @@
 ﻿{
-    "small": {
-        "max_train_epochs": 50
-    },
-    "medium": {
-        "max_train_epochs": 50
-    },
-    "large": {
-        "max_train_epochs": 40
+    "size_ranges": [
+        {
+            "min": 1,
+            "max": 20,
+            "name": "small",
+            "config": {
+                "max_train_epochs": 50
+            }
+        },
+        {
+            "min": 21,
+            "max": 40,
+            "name": "medium",
+            "config": {
+                "max_train_epochs": 50
+            }
+        },
+        {
+            "min": 41,
+            "max": 60,
+            "name": "large",
+            "config": {
+                "max_train_epochs": 40
+            }
+        }
+    ],
+    "default": {
+        "max_train_epochs": 30
     }
 }

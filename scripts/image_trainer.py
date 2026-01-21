@@ -158,25 +158,31 @@ def get_config_for_model(lrs_config: dict, model_hash: str, dataset_size: int = 
     
     target_config = None
 
+    # Sanitize input name if provided
+    clean_name = raw_model_name.strip().strip("'").strip('"') if raw_model_name else None
+
     # 1. Try Hash Lookup
     if isinstance(data, dict):
         if model_hash in data:
             target_config = data.get(model_hash)
-            print(f"LRS: Found config via Hash: {model_hash}", flush=True)
+            print(f"DEBUG_LRS: MATCH [HASH] -> {model_hash}", flush=True)
+            
         # 2. Try Raw Name Lookup (Fallback)
-        elif raw_model_name:
-             print(f"LRS: Hash lookup failed. Trying fallback lookup for: {raw_model_name}", flush=True)
+        elif clean_name:
              # Direct lookup
-             if raw_model_name in data:
-                 target_config = data.get(raw_model_name)
-                 print(f"LRS: Found config via Direct Name Key", flush=True)
+             if clean_name in data:
+                 target_config = data.get(clean_name)
+                 print(f"DEBUG_LRS: MATCH [DIRECT KEY] -> {clean_name}", flush=True)
              else:
                  # Iterative lookup (scan 'model_name' field)
                  for key, val in data.items():
-                     if isinstance(val, dict) and val.get("model_name") == raw_model_name:
+                     if isinstance(val, dict) and val.get("model_name") == clean_name:
                          target_config = val
-                         print(f"LRS: Found config via 'model_name' field match in key: {key}", flush=True)
+                         print(f"DEBUG_LRS: MATCH [FIELD SCAN] -> {clean_name} (Key: {key})", flush=True)
                          break
+        
+        if not target_config and clean_name:
+             print(f"DEBUG_LRS: FAIL lookup for '{clean_name}'. Hash was '{model_hash}'", flush=True)
 
     if target_config:
         # If dataset_size provided and model_config has size categories, merge them
@@ -189,11 +195,13 @@ def get_config_for_model(lrs_config: dict, model_hash: str, dataset_size: int = 
                 # Merge Config
                 base_model_config = {k: v for k, v in target_config.items() if k not in ["small", "medium", "large"]}
                 merged = merge_model_config(default_config, base_model_config)
+                print(f"DEBUG_LRS: Merged Size Config ({size_category})", flush=True)
                 return merge_model_config(merged, size_specific_config)
         
         return merge_model_config(default_config, target_config)
 
     if default_config:
+        print("DEBUG_LRS: Using Default Config", flush=True)
         return default_config
 
     return None

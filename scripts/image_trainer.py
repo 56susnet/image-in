@@ -503,7 +503,15 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     # Direct injection for root keys (max_train_epochs, train_batch_size, etc.)
                     config[key] = value
                     
-                    # 
+                    # ----------------------------------------------------
+                    # [COHERENCE] PRODIGY/D-ADAPTATION SYNC
+                    # If we set any specific LR, we MUST set them all to avoid Prodigy group error
+                    if key in ["unet_lr", "text_encoder_lr", "learning_rate"]:
+                        config["learning_rate"] = value
+                        config["unet_lr"] = value
+                        config["text_encoder_lr"] = value
+                        print(f"   [LR SYNC] Synchronized all LR to {value} for optimizer coherence", flush=True)
+
                     if key == "max_train_epochs":
                         if "max_train_steps" in config:
                             print(f"   [COHERENCE] Clearing max_train_steps to prioritize epoch scaling ({value} epochs)", flush=True)

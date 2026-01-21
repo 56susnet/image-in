@@ -15,7 +15,6 @@ import re
 import time
 import yaml
 import toml
-import signal
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
@@ -157,30 +156,22 @@ def get_config_for_model(lrs_config: dict, model_name: str, dataset_size: int = 
     data = lrs_config.get("data")
     default_config = lrs_config.get("default", {})
 
-    if isinstance(data, dict):
-        # SUPPORT BOTH NAME AND HASH for maximum compatibility
-        model_config = None
-        if model_name in data:
-            model_config = data.get(model_name)
-        else:
-            # Fallback for literally checking if any key matches model_name 
-            # (already covered by model_name in data, but helpful if we hash in code)
-            pass
+    if isinstance(data, dict) and model_name in data:
+        model_config = data.get(model_name)
+        
+        # If dataset_size provided and model_config has size categories, merge them
+        if dataset_size is not None and isinstance(model_config, dict):
+            size_category = get_dataset_size_category(dataset_size)
             
-        if model_config:
-            # If dataset_size provided and model_config has size categories, merge them
-            if dataset_size is not None and isinstance(model_config, dict):
-                size_category = get_dataset_size_category(dataset_size)
-                
-                # Check if model_config has size-specific settings
-                if size_category in model_config:
-                    size_specific_config = model_config.get(size_category, {})
-                    # Merge Config
-                    base_model_config = {k: v for k, v in model_config.items() if k not in ["small", "medium", "large"]}
-                    merged = merge_model_config(default_config, base_model_config)
-                    return merge_model_config(merged, size_specific_config)
-            
-            return merge_model_config(default_config, model_config)
+            # Check if model_config has size-specific settings
+            if size_category in model_config:
+                size_specific_config = model_config.get(size_category, {})
+                # Merge Config
+                base_model_config = {k: v for k, v in model_config.items() if k not in ["small", "medium", "large"]}
+                merged = merge_model_config(default_config, base_model_config)
+                return merge_model_config(merged, size_specific_config)
+        
+        return merge_model_config(default_config, model_config)
 
     if default_config:
         return default_config
@@ -314,12 +305,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     lrs_config = load_lrs_config(model_type, is_style)
     if lrs_config:
         model_hash = hash_model(model_name)
-        # CHECK HASH FIRST, THEN LITERAL NAME
         lrs_settings = get_config_for_model(lrs_config, model_hash, dataset_size)
-        if not lrs_settings or lrs_settings == lrs_config.get("default", {}):
-            lrs_settings_name = get_config_for_model(lrs_config, model_name, dataset_size)
-            if lrs_settings_name:
-                lrs_settings = lrs_settings_name
 
     if dataset_size > 0:
         size_config = load_size_based_config(model_type, is_style, dataset_size)
@@ -406,7 +392,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.yaml")
         save_config(config, config_path)
         print(f"Created ai-toolkit config at {config_path} with Auto-Scaling", flush=True)
-        return config_path, output_dir, dataset_size
+        return config_path
     else:
         with open(config_template_path, "r") as file:
             config = toml.load(file)
@@ -503,15 +489,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     # Direct injection for root keys (max_train_epochs, train_batch_size, etc.)
                     config[key] = value
                     
-                    # ----------------------------------------------------
-                    # [COHERENCE] PRODIGY/D-ADAPTATION SYNC
-                    # If we set any specific LR, we MUST set them all to avoid Prodigy group error
-                    if key in ["unet_lr", "text_encoder_lr", "learning_rate"]:
-                        config["learning_rate"] = value
-                        config["unet_lr"] = value
-                        config["text_encoder_lr"] = value
-                        print(f"   [LR SYNC] Synchronized all LR to {value} for optimizer coherence", flush=True)
-
+                    # 
                     if key == "max_train_epochs":
                         if "max_train_steps" in config:
                             print(f"   [COHERENCE] Clearing max_train_steps to prioritize epoch scaling ({value} epochs)", flush=True)
@@ -520,11 +498,11 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)
         print(f"Created config at {config_path}", flush=True)
-        return config_path, output_dir, dataset_size
+        return config_path, output_dir
 
 
 
-def run_training(model_type, config_path, output_dir, dataset_size):
+def run_training(model_type, config_path, output_dir):
     print(f"Starting training with config: {config_path}", flush=True)
 
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
@@ -560,107 +538,14 @@ def run_training(model_type, config_path, output_dir, dataset_size):
             env=env
         )
 
-        # JAE (Jordansky Adaptive Engine) - Monitor Setup
-        if dataset_size <= 20: 
-            stop_threshold = 0.0005
-            size_label = "SMALL"
-        elif dataset_size <= 40: 
-            stop_threshold = 0.0003
-            size_label = "MEDIUM"
-        else: 
-            stop_threshold = 0.0002
-            size_label = "LARGE"
-
-        print(f"[JAE] Monitoring Active. Dataset: {size_label}, Threshold: {stop_threshold}", flush=True)
-
-        loss_history = []
-        epoch_avg_losses = []
-        current_epoch_losses = []
-        last_epoch_avg = None
-        stop_triggered = False
-        last_processed_step = -1
-        patience_counter = 0
-        max_patience = 8 # Increased patience for more robustness
-        
-        # --- EMPIRE WINNING MATH ---
-        # champion benchmarks show active learning up to 300-350 steps.
-        # We enforce a hard floor to prevent underfitting.
-        if dataset_size <= 20:
-            hard_min_steps = 300
-            stop_threshold = 0.00005 # 10x tighter to reach 0.03 range
-        else:
-            hard_min_steps = 450
-            stop_threshold = 0.00003
-
         for line in process.stdout:
             print(line, end="", flush=True)
-            
-            # --- PARSE LOSS & STEP ---
-            current_loss = None
-            current_step = -1
-            
-            try:
-                if "avr_loss=" in line:
-                    loss_str = line.split("avr_loss=")[-1].split("]")[0].strip()
-                    current_loss = float(loss_str)
-                    step_part = line.split("|")[-1].split("[")[0].strip()
-                    if "/" in step_part:
-                        current_step = int(step_part.split("/")[0].strip())
-                elif "Loss:" in line:
-                    loss_str = line.split("Loss:")[-1].strip().split(" ")[0].strip()
-                    current_loss = float(loss_str)
-                    if "Step" in line:
-                        step_part = line.split("Step")[-1].split(":")[0].strip()
-                        if "/" in step_part:
-                            current_step = int(step_part.split("/")[0].strip())
-            except: pass
-
-            # Only process if it's a NEW step and we have a loss
-            if current_loss is not None and current_step > last_processed_step:
-                last_processed_step = current_step
-                try:
-                    current_epoch_losses.append(current_loss)
-                    
-                    # JAE Warmup: CHAMPION FLOOR (No exit before 300 steps)
-                    if current_step < hard_min_steps:
-                        continue
-
-                    # Evaluate window
-                    steps_per_epoch = max(15, int(dataset_size * 5 / 4))
-                    if len(current_epoch_losses) >= steps_per_epoch:
-                        avg_loss = sum(current_epoch_losses) / len(current_epoch_losses)
-                        
-                        if last_epoch_avg is not None:
-                            delta = last_epoch_avg - avg_loss
-                            
-                            # Decision logic: Only stop if delta is tiny AND loss is already low (~under 0.06)
-                            # This avoids stopping at high-loss plateaus.
-                            if delta < stop_threshold and avg_loss < 0.06:
-                                patience_counter += 1
-                                print(f"\n[JAE PATIENCE] Step {current_step}: Signal {delta:.6f} < {stop_threshold}. Patience: {patience_counter}/{max_patience}", flush=True)
-                                
-                                if patience_counter >= max_patience:
-                                    print(f"[JAE SIGNAL] Champion convergence reached at step {current_step}! Loss: {avg_loss:.4f}", flush=True)
-                                    print(f"[JAE SIGNAL] Requesting graceful save and exit...", flush=True)
-                                    stop_triggered = True
-                                    process.send_signal(signal.SIGINT)
-                                    break
-                            else:
-                                patience_counter = 0
-                        
-                        last_epoch_avg = avg_loss
-                        current_epoch_losses = [] 
-                except:
-                    pass
 
         return_code = process.wait()
-        if return_code != 0 and not stop_triggered:
+        if return_code != 0:
             raise subprocess.CalledProcessError(return_code, training_command)
 
-        if stop_triggered:
-            print("[JAE] Training gracefully halted by Early Stopping.", flush=True)
-        else:
-            print("Training subprocess completed successfully.", flush=True)
+        print("Training subprocess completed successfully.", flush=True)
 
     except subprocess.CalledProcessError as e:
         print("Training subprocess failed!", flush=True)
@@ -668,39 +553,17 @@ def run_training(model_type, config_path, output_dir, dataset_size):
         print(f"Command: {' '.join(e.cmd) if isinstance(e.cmd, list) else e.cmd}", flush=True)
         raise RuntimeError(f"Training subprocess failed with exit code {e.returncode}")
 
-    # --- FIX: HUNTER MODE (Find and move the best checkpoint) ---
+    # --- FIX: MOVE FILE IF SAVED IN WRONG LOCATION ---
     if output_dir:
         try:
-            os.makedirs(output_dir, exist_ok=True)
-            search_dir = "/app/checkpoints"
-            found_checkpoint = None
-            
-            # 1. Check default location
-            default_loc = os.path.join(search_dir, "last.safetensors")
+            default_loc = "/app/checkpoints/last.safetensors"
             if os.path.exists(default_loc):
-                found_checkpoint = default_loc
-            else:
-                # 2. Hunter Mode: Search for any safetensors file in search_dir
-                print(f"[HUNTER] Looking for checkpoints in {search_dir}...", flush=True)
-                for root, _, files in os.walk(search_dir):
-                    if root == output_dir: continue # Don't search in target
-                    for file in files:
-                        if file.endswith(".safetensors") and "last" in file.lower():
-                            found_checkpoint = os.path.join(root, file)
-                            break
-                    if found_checkpoint: break
-            
-            if found_checkpoint:
-                target_path = os.path.join(output_dir, "last.safetensors")
-                if found_checkpoint != target_path:
-                    print(f"[FIX] Found checkpoint at {found_checkpoint}. Moving to {target_path}", flush=True)
-                    shutil.move(found_checkpoint, target_path)
-                    print(f"[FIX] Successfully moved to {target_path}", flush=True)
-            else:
-                print(f"[WARNING] No checkpoint (.safetensors) found in {search_dir} after training!", flush=True)
-                
+                print(f"[FIX] Moving checkpoint from {default_loc} to {output_dir}", flush=True)
+                os.makedirs(output_dir, exist_ok=True)
+                shutil.move(default_loc, os.path.join(output_dir, "last.safetensors"))
+                print(f"[FIX] Successfully moved to {output_dir}/last.safetensors", flush=True)
         except Exception as e:
-            print(f"[FIX] Error in Hunter Mode: {e}", flush=True)
+            print(f"[FIX] Error moving checkpoint: {e}", flush=True)
     # ------------------------------------------------
 
 def hash_model(model: str) -> str:
@@ -740,7 +603,7 @@ async def main():
         output_dir=train_cst.IMAGE_CONTAINER_IMAGES_PATH
     )
 
-    config_path, output_dir, dataset_size = create_config(
+    config_path, output_dir = create_config(
         args.task_id,
         model_path,
         args.model,
@@ -749,7 +612,7 @@ async def main():
         args.trigger_word,
     )
 
-    run_training(args.model_type, config_path, output_dir, dataset_size)
+    run_training(args.model_type, config_path, output_dir)
 
 
 if __name__ == "__main__":

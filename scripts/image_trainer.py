@@ -500,7 +500,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.yaml")
         save_config(config, config_path)
         print(f"Created ai-toolkit config at {config_path} with Auto-Scaling", flush=True)
-        return config_path
+        return config_path, output_dir
     else:
         with open(config_template_path, "r") as file:
             config = toml.load(file)

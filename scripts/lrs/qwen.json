@@ -5,7 +5,7 @@
             "model_name": "Qwen2-VL-7B-Instruct",
             "small": {
                 "lr": 1.2e-4,
-                "max_train_epochs": 2,
+                "steps": 600,
                 "save_every": 200,
                 "ema_config": {
                     "use_ema": true,

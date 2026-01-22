@@ -73,7 +73,7 @@
                 "unet_lr": 0.00005
             },
             "large": {
-                "max_train_epochs": 2,
+                "max_train_epochs": 40,
                 "unet_lr": 0.00005
             }
         },

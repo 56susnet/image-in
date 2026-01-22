@@ -5,7 +5,7 @@
             "model_name": "Z-Image-Turbo-V2",
             "small": {
                 "lr": 1.2e-4,
-                "max_train_epochs": 2,
+                "steps": 450,
                 "save_every": 150,
                 "ema_config": {
                     "use_ema": true,

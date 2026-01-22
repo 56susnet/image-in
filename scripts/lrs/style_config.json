@@ -645,8 +645,7 @@
         "unet_lr": 4e-5,
         "text_encoder_lr": 4e-6,
         "noise_offset": 0.0411,
-        "min_snr_gamma": 7,
-        "max_train_epochs": 2
+        "min_snr_gamma": 7
       },
       "medium": {
         "unet_lr": 3e-5,

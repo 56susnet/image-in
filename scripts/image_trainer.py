@@ -500,8 +500,9 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                 if trigger_word:
                     process['trigger_word'] = trigger_word
 
-                # 3. AUTO-ADAPTIVE STEPS (DURATION BASED) - JORDANSKY ENGINE
-                if hours_to_complete and hours_to_complete > 0:
+                # 3. AUTO-ADAPTIVE STEPS (DURATION BASED) - JORDANSKY ENGINE (QWEN/Z-IMAGE ONLY)
+                # SDXL & FLUX use Manual Steps (Proven Strategy)
+                if (model_type in [ImageModelType.QWEN_IMAGE.value, ImageModelType.Z_IMAGE.value]) and hours_to_complete and hours_to_complete > 0:
                     dynamic_steps = int(hours_to_complete * 800)
                     print(f"[AUTO-ADAPTIVE] Adjusting steps to {dynamic_steps} for {hours_to_complete}h duration (800 steps/h).", flush=True)
                     if 'train' in process:
@@ -626,13 +627,10 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
 def run_training(model_type, config_path, output_dir, hours_to_complete=None, script_start_time=None):
     print(f"Starting training with config: {config_path}", flush=True)
     
-    # Set aggressive safety margin: 5 minutes (300 seconds) before the absolute deadline
-    if hours_to_complete and script_start_time:
-        safe_duration = (hours_to_complete * 3600) - 300
-        deadline = script_start_time + safe_duration
-        print(f"[SAFE-STOP] Total Task duration: {hours_to_complete}h. Absolute deadline set for {safe_duration/60:.1f} minutes (5m buffer).", flush=True)
-    else:
-        deadline = None
+    # [REVERTED TO CLASSIC] No Safe-Stop/Deadline logic. 
+    # SDXL/Flux/Qwen run until their configured steps/epochs completion.
+    
+    is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
 
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
     env = os.environ.copy()
@@ -669,16 +667,6 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
 
         for line in process.stdout:
             print(line, end="", flush=True)
-            
-            # Check if we've reached the safety deadline
-            if deadline and time.time() > deadline:
-                print(f"\n[SAFE-STOP] Approaching task deadline! Terminating training gracefully to allow upload...", flush=True)
-                process.terminate()
-                try:
-                    process.wait(timeout=30)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                break
 
         return_code = process.wait()
         if return_code != 0:

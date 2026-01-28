@@ -10,7 +10,7 @@ config:
     network:
       type: lora
       linear: 64
-      linear_alpha: 128
+      linear_alpha: 64
       conv_rank: 32
       conv_alpha: 32
 

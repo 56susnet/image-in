@@ -39,7 +39,7 @@ config:
       ema_config:
         use_ema: true
         ema_decay: 0.999
-      caption_dropout_rate: 0.05      caption_dropout_rate: 0.15
+      caption_dropout_rate: 0.05
 
       loss_type: huber
       huber_c: 0.1

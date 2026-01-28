@@ -56,15 +56,10 @@
             "model_name": "Qwen2-VL-7B-Instruct-Jib",
             "small": {
                 "lr": 1.4e-4,
-                "rank": 64,
-                "alpha": 64,
-                "conv_rank": 32,
-                "conv_alpha": 32,
+                "rank": 32,
+                "alpha": 32,
                 "do_cfg": true,
                 "cfg_scale": 3.5,
-                "optimizer_params": {
-                    "weight_decay": 1e-1
-                },
                 "ema_config": {
                     "use_ema": true,
                     "ema_decay": 0.999
@@ -72,15 +67,10 @@
             },
             "medium": {
                 "lr": 1.2e-4,
-                "rank": 64,
-                "alpha": 64,
-                "conv_rank": 32,
-                "conv_alpha": 32,
+                "rank": 32,
+                "alpha": 32,
                 "do_cfg": true,
                 "cfg_scale": 3.5,
-                "optimizer_params": {
-                    "weight_decay": 1e-1
-                },
                 "ema_config": {
                     "use_ema": true,
                     "ema_decay": 0.999
@@ -88,15 +78,10 @@
             },
             "large": {
                 "lr": 1.0e-4,
-                "rank": 64,
-                "alpha": 64,
-                "conv_rank": 32,
-                "conv_alpha": 32,
+                "rank": 32,
+                "alpha": 32,
                 "do_cfg": true,
                 "cfg_scale": 3.5,
-                "optimizer_params": {
-                    "weight_decay": 1e-1
-                },
                 "ema_config": {
                     "use_ema": true,
                     "ema_decay": 0.999

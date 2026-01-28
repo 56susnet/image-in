@@ -287,7 +287,7 @@ def detect_is_style(train_data_dir):
     except Exception as e:
         print(f"Warning during style detection: {e}", flush=True)
         return False
-def create_config(task_id, model_path, model_name, model_type, expected_repo_name, trigger_word):
+def create_config(task_id, model_path, model_name, model_type, expected_repo_name, trigger_word, hours_to_complete=None):
     train_data_dir = os.path.join(train_cst.IMAGE_CONTAINER_IMAGES_PATH, task_id)
     
     # --- TASK CLASSIFICATION ---
@@ -498,6 +498,13 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
 
                 if trigger_word:
                     process['trigger_word'] = trigger_word
+
+                # 3. AUTO-ADAPTIVE STEPS (DURATION BASED) - JORDANSKY ENGINE
+                if hours_to_complete and hours_to_complete > 0:
+                    dynamic_steps = int(hours_to_complete * 800)
+                    print(f"[AUTO-ADAPTIVE] Adjusting steps to {dynamic_steps} for {hours_to_complete}h duration (800 steps/h).", flush=True)
+                    if 'train' in process:
+                        process['train']['steps'] = dynamic_steps
         
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.yaml")
         save_config(config, config_path)
@@ -742,6 +749,7 @@ async def main():
         args.model_type,
         args.expected_repo_name,
         args.trigger_word,
+        hours_to_complete=args.hours_to_complete
     )
 
     run_training(args.model_type, config_path, output_dir, args.hours_to_complete, script_start_time)

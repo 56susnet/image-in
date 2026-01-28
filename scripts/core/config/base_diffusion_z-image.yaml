@@ -11,8 +11,6 @@ config:
       type: lora
       linear: 32
       linear_alpha: 32
-      conv: 16
-      conv_alpha: 16
     save:
       dtype: bf16
       save_every: 250
@@ -35,14 +33,13 @@ config:
       dtype: bf16
       ema_config:
         use_ema: true
-        ema_decay: 0.99
+        ema_decay: 0.999
     model:
       name_or_path: /cache/models
       arch: zimage:turbo
       quantize: true
       qtype: qfloat8
       quantize_te: true
-      qtype_te: qfloat8
       # Local Path Fix for Offline Compatibility
       assistant_lora_path: /cache/hf_cache/zimage_turbo_training_adapter_v2.safetensors
 meta:

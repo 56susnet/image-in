@@ -258,7 +258,8 @@ def detect_is_style(train_data_dir):
         style_keywords = [
             "painting", "art style", "sketch", "comic", "cyberpunk", "steampunk", "impressionist", 
             "minimalist", "gothic", "pixel art", "anime style", "3d render", "vector art", 
-            "abstract", "illustration", "manga", "watercolor", "digital art", "pop art"
+            "abstract", "illustration", "manga", "watercolor", "digital art", "pop art",
+            "lora style", "style", "drawing", "render"
         ]
         
         person_count = 0
@@ -281,8 +282,8 @@ def detect_is_style(train_data_dir):
         if person_ratio >= 0.20:
             return False
             
-        # If it's not a person task and style keywords are present in > 25% of prompts, it's a STYLE task
-        return style_ratio >= 0.25
+        # If it's not a person task and style keywords are present in > 15% of prompts, it's a STYLE task
+        return style_ratio >= 0.15
         
     except Exception as e:
         print(f"Warning during style detection: {e}", flush=True)

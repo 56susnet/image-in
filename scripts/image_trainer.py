@@ -475,6 +475,12 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                         elif key in ["optimizer_type", "optimizer"]: process['train']['optimizer'] = value
                         elif key in ["max_train_epochs", "steps"]:
                             process['train']['steps'] = calculate_steps(value) if key == "max_train_epochs" else value
+                        elif key in ["rank", "alpha", "conv_rank", "conv_alpha"]:
+                            # AI-Toolkit strict network block mapping
+                            if 'network' not in process: process['network'] = {}
+                            if key == "rank": process['network']['linear'] = value
+                            elif key == "alpha": process['network']['linear_alpha'] = value
+                            else: process['network'][key] = value # handles conv_rank, conv_alpha
                         elif key == "optimizer_args" and isinstance(value, list):
                             opt_params = {}
                             for item in value:
@@ -488,6 +494,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                                     opt_params[k.strip()] = v
                             process['train']['optimizer_params'] = opt_params
                         else: process['train'][key] = value
+
 
                 if trigger_word:
                     process['trigger_word'] = trigger_word

@@ -9,9 +9,9 @@ config:
     device: cuda
     network:
       type: lora
-      linear: 128
-      linear_alpha: 64
-      conv_rank: 64
+      linear: 64
+      linear_alpha: 128
+      conv_rank: 32
       conv_alpha: 32
 
     save:
@@ -38,7 +38,8 @@ config:
       train_unet: true
       train_text_encoder: false
       optimizer_params:
-        weight_decay: 2.0e-4
+        weight_decay: 1.0e-1
+
       ema_config:
         use_ema: true
         ema_decay: 0.999

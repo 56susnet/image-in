@@ -4,60 +4,102 @@
         "gradients-io-tournaments/Qwen-Image": {
             "model_name": "Qwen2-VL-7B-Instruct",
             "small": {
-                "lr": 1.2e-4,
-                "steps": 600,
-                "save_every": 200,
+                "lr": 1.4e-4,
+                "rank": 128,
+                "alpha": 64,
+                "conv_rank": 64,
+                "conv_alpha": 32,
+                "do_cfg": true,
+                "cfg_scale": 3.5,
+                "optimizer_params": {
+                    "weight_decay": 2e-4
+                },
                 "ema_config": {
                     "use_ema": true,
-                    "ema_decay": 0.995
+                    "ema_decay": 0.999
                 }
             },
             "medium": {
-                "lr": 1e-4,
-                "steps": 1600,
-                "save_every": 400,
+                "lr": 1.2e-4,
+                "rank": 128,
+                "alpha": 64,
+                "conv_rank": 64,
+                "conv_alpha": 32,
+                "do_cfg": true,
+                "cfg_scale": 3.5,
+                "optimizer_params": {
+                    "weight_decay": 2e-4
+                },
                 "ema_config": {
                     "use_ema": true,
-                    "ema_decay": 0.99
+                    "ema_decay": 0.999
                 }
             },
             "large": {
-                "lr": 8e-5,
-                "steps": 2400,
-                "save_every": 600,
+                "lr": 1.0e-4,
+                "rank": 128,
+                "alpha": 64,
+                "conv_rank": 64,
+                "conv_alpha": 32,
+                "do_cfg": true,
+                "cfg_scale": 3.5,
+                "optimizer_params": {
+                    "weight_decay": 2e-4
+                },
                 "ema_config": {
                     "use_ema": true,
-                    "ema_decay": 0.985
+                    "ema_decay": 0.999
                 }
             }
         },
         "gradients-io-tournaments/Qwen-Image-Jib-Mix": {
             "model_name": "Qwen2-VL-7B-Instruct-Jib",
             "small": {
-                "lr": 1.2e-4,
-                "steps": 800,
-                "save_every": 200,
+                "lr": 1.4e-4,
+                "rank": 128,
+                "alpha": 64,
+                "conv_rank": 64,
+                "conv_alpha": 32,
+                "do_cfg": true,
+                "cfg_scale": 3.5,
+                "optimizer_params": {
+                    "weight_decay": 2e-4
+                },
                 "ema_config": {
                     "use_ema": true,
-                    "ema_decay": 0.995
+                    "ema_decay": 0.999
                 }
             },
             "medium": {
-                "lr": 1e-4,
-                "steps": 1600,
-                "save_every": 400,
+                "lr": 1.2e-4,
+                "rank": 128,
+                "alpha": 64,
+                "conv_rank": 64,
+                "conv_alpha": 32,
+                "do_cfg": true,
+                "cfg_scale": 3.5,
+                "optimizer_params": {
+                    "weight_decay": 2e-4
+                },
                 "ema_config": {
                     "use_ema": true,
-                    "ema_decay": 0.99
+                    "ema_decay": 0.999
                 }
             },
             "large": {
-                "lr": 8e-5,
-                "steps": 2400,
-                "save_every": 600,
+                "lr": 1.0e-4,
+                "rank": 128,
+                "alpha": 64,
+                "conv_rank": 64,
+                "conv_alpha": 32,
+                "do_cfg": true,
+                "cfg_scale": 3.5,
+                "optimizer_params": {
+                    "weight_decay": 2e-4
+                },
                 "ema_config": {
                     "use_ema": true,
-                    "ema_decay": 0.985
+                    "ema_decay": 0.999
                 }
             }
         }

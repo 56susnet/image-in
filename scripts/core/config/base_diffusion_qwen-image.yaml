@@ -25,27 +25,33 @@ config:
     train:
       batch_size: 1
       steps: 3000
-      lr: 0.0001
+      lr: 1.0e-4
       optimizer: adamw8bit
       gradient_checkpointing: true
       noise_scheduler: flowmatch
       timestep_type: weighted
       dtype: bf16
-      cache_text_embeddings: true
+      cache_text_embeddings: false
       train_unet: true
       train_text_encoder: false
+      optimizer_params:
+        weight_decay: 2.0e-4
       ema_config:
         use_ema: true
-        ema_decay: 0.99
+        ema_decay: 0.999
+      caption_dropout_rate: 0.15
+
+      loss_type: huber
+      huber_c: 0.1
     model:
       name_or_path: /cache/models
       arch: qwen_image
       quantize: true
       # Local Path Fix for Offline Compatibility
-      qtype: uint3|/cache/hf_cache/qwen_image_torchao_uint3.safetensors
+      qtype: float8
       quantize_te: true
-      qtype_te: qfloat8
+      qtype_te: float8
       low_vram: true
 meta:
-  name: qwen_image_lora_empire_base
-  version: '1.0'
+  name: qwen_image_lora_jordansky
+  version: '1.6'

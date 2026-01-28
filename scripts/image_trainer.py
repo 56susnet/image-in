@@ -367,10 +367,6 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         "rayonlabs/FLUX.1-dev": 350, "mhnakif/fluxunchained-dev": 350
     }
 
-    network_config_qwen = {
-        "gradients-io-tournaments/Qwen-Image": 888, "gradients-io-tournaments/Qwen-Image-Jib-Mix": 888
-    }
-
     config_mapping = {
         228: {"network_dim": 32, "network_alpha": 32, "network_args": ["conv_dim=8", "conv_alpha=8", "algo=locon"]},
         235: {"network_dim": 32, "network_alpha": 32, "network_args": ["conv_dim=8", "conv_alpha=8", "algo=locon"]},
@@ -380,7 +376,6 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         900: {"network_dim": 128, "network_alpha": 128, "network_args": ["conv_dim=32", "conv_alpha=32", "algo=locon"]},
         500: {"network_dim": 64, "network_alpha": 64, "network_args": ["conv_dim=4", "conv_alpha=4", "dropout=0"]},
         350: {"network_dim": 128, "network_alpha": 128, "network_args": ["train_double_block_indices=all", "train_single_block_indices=all", "train_t5xxl=True"]},
-        888: {"network_dim": 96, "network_alpha": 96, "network_args": []},
         999: {"network_dim": 32, "network_alpha": 32, "network_args": ["conv_dim=32", "conv_alpha=32"]}
     }
 
@@ -390,12 +385,12 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     elif model_type == ImageModelType.FLUX.value:
         config_id = network_config_flux.get(model_name, 350)
     elif model_type == ImageModelType.QWEN_IMAGE.value:
-        config_id = network_config_qwen.get(model_name, 888)
+        config_id = None # Fully handled by LRS/qwen.json
     else:
         target_dict = network_config_style if is_style else network_config_person
         config_id = target_dict.get(model_name, 235)
 
-    model_params = config_mapping.get(config_id, config_mapping[235])
+    model_params = config_mapping.get(config_id, config_mapping[235]) if config_id else {"network_dim": 32, "network_alpha": 32, "network_args": []}
     net_dim = model_params["network_dim"]
 
     print(f"[CONFIG SPESIFICATION - LAYER II] Model '{model_name}' Rank {net_dim}", flush=True)
@@ -613,8 +608,16 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
 
 
 
-def run_training(model_type, config_path, output_dir):
+def run_training(model_type, config_path, output_dir, hours_to_complete=None, script_start_time=None):
     print(f"Starting training with config: {config_path}", flush=True)
+    
+    # Set aggressive safety margin: 5 minutes (300 seconds) before the absolute deadline
+    if hours_to_complete and script_start_time:
+        safe_duration = (hours_to_complete * 3600) - 300
+        deadline = script_start_time + safe_duration
+        print(f"[SAFE-STOP] Total Task duration: {hours_to_complete}h. Absolute deadline set for {safe_duration/60:.1f} minutes (5m buffer).", flush=True)
+    else:
+        deadline = None
 
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
     env = os.environ.copy()
@@ -651,6 +654,16 @@ def run_training(model_type, config_path, output_dir):
 
         for line in process.stdout:
             print(line, end="", flush=True)
+            
+            # Check if we've reached the safety deadline
+            if deadline and time.time() > deadline:
+                print(f"\n[SAFE-STOP] Approaching task deadline! Terminating training gracefully to allow upload...", flush=True)
+                process.terminate()
+                try:
+                    process.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                break
 
         return_code = process.wait()
         if return_code != 0:
@@ -683,6 +696,7 @@ def hash_model(model: str) -> str:
     return hashed 
 
 async def main():
+    script_start_time = time.time()
     print("--------------------------------------------------", flush=True)
     print("ONLY NINJA CAN STOP ME NOW", flush=True)
     print("--------------------------------------------------", flush=True)
@@ -723,7 +737,7 @@ async def main():
         args.trigger_word,
     )
 
-    run_training(args.model_type, config_path, output_dir)
+    run_training(args.model_type, config_path, output_dir, args.hours_to_complete, script_start_time)
 
 
 if __name__ == "__main__":

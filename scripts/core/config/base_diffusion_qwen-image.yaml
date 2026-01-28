@@ -31,7 +31,7 @@ config:
       gradient_checkpointing: true
       noise_scheduler: flowmatch
       timestep_type: weighted
-      snr_gamma: 5.0
+
       dtype: bf16
       cache_text_embeddings: false
       train_unet: true

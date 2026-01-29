@@ -8,15 +8,26 @@ def rescue():
     
     # Target file specific to your failed log
     target_file = "last.safetensors"
-    # Specific path from your log
-    base_search_path = "/app/checkpoints"
+    
+    # Search locations (Docker path AND Host path)
+    search_paths = [
+        "/app/checkpoints",
+        "./checkpoints",
+        ".",
+        os.getcwd()
+    ]
     target_repo = "Jordansky/ipunktest-17"
     
     found_path = None
     
     # 1. Search for the file
-    print(f"Searching for {target_file} in {base_search_path}...")
-    for root, dirs, files in os.walk(base_search_path):
+    print(f"Searching for {target_file}...")
+    
+    for base_path in search_paths:
+        if not os.path.exists(base_path): continue
+        
+        print(f"Scanning {base_path}...")
+        for root, dirs, files in os.walk(base_path):
         if target_file in files:
             # Check if this folder looks like the right task
             if "ipunktest-17" in root or "18de36d8" in root:

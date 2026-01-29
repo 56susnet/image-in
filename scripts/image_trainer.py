@@ -298,14 +298,16 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     is_style = detect_is_style(train_data_dir)
     detection_method = "Dataset-driven"
     
-    # 2. FALLBACK DETECTION (Metadata-based)
+    # 2. FALLBACK DETECTION (Metadata-based) - ONLY IF DATASET IS UNCERTAIN
+    # If dataset says its STYLE (True), we trust it.
+    # If dataset says its PERSON (False), we only override if repository name is EXPLICITLY about style.
     if not is_style:
-        meta_style = "style" in model_name.lower() or "style" in task_id.lower() or (expected_repo_name and "style" in expected_repo_name.lower())
-        if meta_style:
-            is_style = True
-            detection_method = "Metadata-driven"
+        # Check if the repo name forcefully suggests style (rare case)
+        if expected_repo_name and "style" in expected_repo_name.lower() and "person" not in expected_repo_name.lower():
+             is_style = True
+             detection_method = "Metadata-driven (Forced Style)"
         else:
-            detection_method = "Default (Person)"
+             detection_method = "Dataset-driven (Verified Person)"
 
     task_type = "style" if is_style else "person"
     print(f"DEBUG_TYPE: Task detected as [{task_type.upper()}] via {detection_method}", flush=True)

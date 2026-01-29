@@ -743,7 +743,30 @@ async def main():
         hours_to_complete=args.hours_to_complete
     )
 
+    # --- EXECUTION ---
+    # Remove existing container with the same name if it exists to avoid conflicts
+    subprocess.run(["docker", "rm", "-f", "image-trainer-example"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
     run_training(args.model_type, config_path, output_dir, args.hours_to_complete, script_start_time)
+
+    # Upload results to HuggingFace
+    repo_id = f"{HUGGINGFACE_USERNAME}/{args.expected_repo_name}"
+    print(f"Uploading model to HuggingFace: {repo_id}...", flush=True)
+    
+    # Remove existing uploader container if it exists
+    subprocess.run(["docker", "rm", "-f", "hf-uploader"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
+    upload_command = [
+        "docker", "run", "--rm",
+        "--name", "hf-uploader",
+        "-v", f"{output_dir}:/app/checkpoints",
+        "-e", f"HF_TOKEN={HUGGINGFACE_TOKEN}",
+        "-e", f"REPO_ID={repo_id}",
+        "diagonalge/miner-diffusion-flux:latest",
+        "python", "/app/trainer/utils/hf_upload.py"
+    ]
+    
+    subprocess.run(upload_command, check=False)
 
 
 if __name__ == "__main__":

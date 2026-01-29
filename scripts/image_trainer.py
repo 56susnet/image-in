@@ -251,8 +251,6 @@ def detect_is_style(train_data_dir):
         if not prompts:
             return False
 
-        # Keywords that strongly indicate a PERSON task (Expanded for higher sensitivity)
-        person_keywords = [
         # IMAGE-YAYA STYLE LIST (Specific styles only)
         style_list = [
             "Watercolor Painting", "Oil Painting", "Digital Art", "Pencil Sketch", "Comic Book Style",

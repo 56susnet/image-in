@@ -28,12 +28,12 @@ def rescue():
         
         print(f"Scanning {base_path}...")
         for root, dirs, files in os.walk(base_path):
-        if target_file in files:
-            # Check if this folder looks like the right task
-            if "ipunktest-17" in root or "18de36d8" in root:
-                found_path = os.path.join(root, target_file)
-                print(f"FOUND: {found_path}")
-                break
+            if target_file in files:
+                # Check if this folder looks like the right task
+                if "ipunktest-17" in root or "18de36d8" in root:
+                    found_path = os.path.join(root, target_file)
+                    print(f"FOUND: {found_path}")
+                    break
     
     if not found_path:
         print(f"CRITICAL: Could not find {target_file} in {base_search_path}")

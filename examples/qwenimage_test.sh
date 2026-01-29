@@ -23,7 +23,8 @@ echo "Downloading model and dataset..."
 docker run --rm --volume "$CHECKPOINTS_DIR:/cache:rw" --env TMPDIR=/cache/tmp --env HF_HOME=/cache/hf_cache --env TRANSFORMERS_CACHE=/cache/hf_cache --name downloader-image trainer-downloader --task-id "$TASK_ID" --model "$MODEL" --dataset "$DATASET_ZIP" --task-type "ImageTask" --model-type "$MODEL_TYPE" 
 
 echo "Starting image training..."
-docker run --rm --gpus all --security-opt=no-new-privileges --cap-drop=ALL --memory=64g --shm-size=16g --cpus=8 --network none --env TMPDIR=/cache/tmp --env HF_HOME=/cache/hf_cache --env TRANSFORMERS_CACHE=/cache/hf_cache --volume "$CHECKPOINTS_DIR:/cache:rw" --volume "$OUTPUTS_DIR:/app/checkpoints/:rw" --name image-trainer-example standalone-image-toolkit-trainer --task-id "$TASK_ID" --model "$MODEL" --dataset-zip "$DATASET_ZIP" --model-type "qwen-image" --expected-repo-name "$EXPECTED_REPO_NAME" --hours-to-complete 2.0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+docker run --rm --gpus all --security-opt=no-new-privileges --cap-drop=ALL --memory=64g --shm-size=16g --cpus=8 --network none --env TMPDIR=/cache/tmp --env HF_HOME=/cache/hf_cache --env TRANSFORMERS_CACHE=/cache/hf_cache --volume "$SCRIPT_DIR/../scripts/image_trainer.py:/workspace/scripts/image_trainer.py:ro" --volume "$CHECKPOINTS_DIR:/cache:rw" --volume "$OUTPUTS_DIR:/app/checkpoints/:rw" --name image-trainer-example standalone-image-toolkit-trainer --task-id "$TASK_ID" --model "$MODEL" --dataset-zip "$DATASET_ZIP" --model-type "qwen-image" --expected-repo-name "$EXPECTED_REPO_NAME" --hours-to-complete 2.0
 
 
 echo "Uploading model to HuggingFace..."

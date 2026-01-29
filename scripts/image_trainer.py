@@ -268,34 +268,39 @@ def detect_is_style(train_data_dir):
             "Acrylic Painting", "Bauhaus", "Flat Cartoon Style", "Carved Relief Art", "Fantasy Realism"
         ]
         
-        person_keywords = ["man", "woman", "girl", "boy", "person", "lady", "male", "female", "face", "hair"]
+        person_keywords = ["man", "woman", "girl", "boy", "person", "lady", "male", "female", "face", "hair", "solo"]
         
         person_count = 0
         style_matches = {s: 0 for s in style_list}
         
         for prompt in prompts:
-            # Person check
-            if any(re.search(rf"\b{word}\b", prompt) for word in person_keywords):
+            # Person check - Removed \b to support tags like '1girl'
+            if any(word in prompt for word in person_keywords):
                 person_count += 1
             
             # Specific Style check
             for style in style_list:
-                if re.search(rf"\b{style.lower()}\b", prompt):
+                if style.lower() in prompt:
                     style_matches[style] += 1
         
         prompt_total = len(prompts)
         person_ratio = person_count / prompt_total
         
-        # Calculate highest style frequency (The Jitu Way)
+        # Find top style for debugging
         max_style_ratio = 0
+        top_style = "None"
         if prompt_total > 0:
-            max_style_ratio = max([count/prompt_total for count in style_matches.values()])
+            for style, count in style_matches.items():
+                ratio = count / prompt_total
+                if ratio > max_style_ratio:
+                    max_style_ratio = ratio
+                    top_style = style
         
-        print(f"DEBUG_CLASSIFY: Person Ratio: {person_ratio:.2f}, Max Specific Style Ratio: {max_style_ratio:.2f}", flush=True)
+        print(f"DEBUG_CLASSIFY: Person Ratio: {person_ratio:.2f}, Max Style Ratio: {max_style_ratio:.2f} ({top_style})", flush=True)
 
         # LOGIC: Only Style if a specific style is very dominant (>25%)
-        # AND Person is not dominant
-        if max_style_ratio >= 0.25 and person_ratio < 0.20:
+        # AND Person is basically non-existent (<10%)
+        if max_style_ratio >= 0.25 and person_ratio < 0.10:
             return True
         
         # Default to Person
@@ -757,7 +762,9 @@ async def main():
 
     # --- EXECUTION ---
     # Remove existing container with the same name if it exists to avoid conflicts
-    subprocess.run(["docker", "rm", "-f", "image-trainer-example"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    import shutil
+    if shutil.which("docker"):
+        subprocess.run(["docker", "rm", "-f", "image-trainer-example"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
     run_training(args.model_type, config_path, output_dir, args.hours_to_complete, script_start_time)
 

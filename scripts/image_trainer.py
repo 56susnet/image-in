@@ -278,8 +278,10 @@ def detect_is_style(train_data_dir):
         
         print(f"DEBUG_CLASSIFY: Person Ratio: {person_ratio:.2f}, Style Ratio: {style_ratio:.2f}", flush=True)
 
-        # LOGIC: If person keywords are present in > 20% of prompts, it's almost certainly a PERSON task
-        if person_ratio >= 0.20:
+        # NEW LOGIC: Priority on Person
+        # If person keywords are present in > 10% of prompts, it's very likely a PERSON task.
+        # Also, if person ratio is competitive with style ratio, we pick Person.
+        if person_ratio >= 0.10 or person_ratio > style_ratio:
             return False
             
         # If it's not a person task and style keywords are present in > 15% of prompts, it's a STYLE task

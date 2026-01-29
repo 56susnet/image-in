@@ -251,63 +251,75 @@ def detect_is_style(train_data_dir):
         if not prompts:
             return False
 
-        # Keywords that strongly indicate a PERSON task
-        person_keywords = ["man", "woman", "girl", "boy", "person", "lady", "gentleman", "male", "female", "guy", "people", "portrait"]
-        
-        # Keywords that strongly indicate a STYLE task
-        style_keywords = [
-            "painting", "art style", "sketch", "comic", "cyberpunk", "steampunk", "impressionist", 
-            "minimalist", "gothic", "pixel art", "anime style", "3d render", "vector art", 
-            "abstract", "illustration", "manga", "watercolor", "digital art", "pop art",
-            "lora style", "style", "drawing", "render"
+        # Keywords that strongly indicate a PERSON task (Expanded for higher sensitivity)
+        person_keywords = [
+        # IMAGE-YAYA STYLE LIST (Specific styles only)
+        style_list = [
+            "Watercolor Painting", "Oil Painting", "Digital Art", "Pencil Sketch", "Comic Book Style",
+            "Cyberpunk", "Steampunk", "Impressionist", "Pop Art", "Minimalist", "Gothic", "Art Nouveau",
+            "Pixel Art", "Anime", "3D Render", "Low Poly", "Photorealistic", "Vector Art",
+            "Abstract Expressionism", "Realism", "Futurism", "Cubism", "Surrealism", "Baroque",
+            "Renaissance", "Fantasy Illustration", "Sci-Fi Illustration", "Ukiyo-e", "Line Art",
+            "Black and White Ink Drawing", "Graffiti Art", "Stencil Art", "Flat Design", "Isometric Art",
+            "Retro 80s Style", "Vaporwave", "Dreamlike", "High Fantasy", "Dark Fantasy", "Medieval Art",
+            "Art Deco", "Hyperrealism", "Sculpture Art", "Caricature", "Chibi", "Noir Style",
+            "Lowbrow Art", "Psychedelic Art", "Vintage Poster", "Manga", "Holographic", "Kawaii",
+            "Monochrome", "Geometric Art", "Photocollage", "Mixed Media", "Ink Wash Painting",
+            "Charcoal Drawing", "Concept Art", "Digital Matte Painting", "Pointillism", "Expressionism",
+            "Sumi-e", "Retro Futurism", "Pixelated Glitch Art", "Neon Glow", "Street Art",
+            "Acrylic Painting", "Bauhaus", "Flat Cartoon Style", "Carved Relief Art", "Fantasy Realism"
         ]
         
+        person_keywords = ["man", "woman", "girl", "boy", "person", "lady", "male", "female", "face", "hair"]
+        
         person_count = 0
-        style_count = 0
+        style_matches = {s: 0 for s in style_list}
         
         for prompt in prompts:
-            is_person = any(re.search(rf"\b{word}\b", prompt) for word in person_keywords)
-            is_style = any(re.search(rf"\b{word}\b", prompt) for word in style_keywords)
+            # Person check
+            if any(re.search(rf"\b{word}\b", prompt) for word in person_keywords):
+                person_count += 1
             
-            if is_person: person_count += 1
-            if is_style: style_count += 1
+            # Specific Style check
+            for style in style_list:
+                if re.search(rf"\b{style.lower()}\b", prompt):
+                    style_matches[style] += 1
         
         prompt_total = len(prompts)
         person_ratio = person_count / prompt_total
-        style_ratio = style_count / prompt_total
         
-        print(f"DEBUG_CLASSIFY: Person Ratio: {person_ratio:.2f}, Style Ratio: {style_ratio:.2f}", flush=True)
+        # Calculate highest style frequency (The Jitu Way)
+        max_style_ratio = 0
+        if prompt_total > 0:
+            max_style_ratio = max([count/prompt_total for count in style_matches.values()])
+        
+        print(f"DEBUG_CLASSIFY: Person Ratio: {person_ratio:.2f}, Max Specific Style Ratio: {max_style_ratio:.2f}", flush=True)
 
-        # NEW LOGIC: Priority on Person
-        # If person keywords are present in > 10% of prompts, it's very likely a PERSON task.
-        # Also, if person ratio is competitive with style ratio, we pick Person.
-        if person_ratio >= 0.10 or person_ratio > style_ratio:
-            return False
-            
-        # If it's not a person task and style keywords are present in > 15% of prompts, it's a STYLE task
-        return style_ratio >= 0.15
+        # LOGIC: Only Style if a specific style is very dominant (>25%)
+        # AND Person is not dominant
+        if max_style_ratio >= 0.25 and person_ratio < 0.20:
+            return True
+        
+        # Default to Person
+        return False
         
     except Exception as e:
         print(f"Warning during style detection: {e}", flush=True)
         return False
+
 def create_config(task_id, model_path, model_name, model_type, expected_repo_name, trigger_word, hours_to_complete=None):
     train_data_dir = os.path.join(train_cst.IMAGE_CONTAINER_IMAGES_PATH, task_id)
     
     # --- TASK CLASSIFICATION ---
-    # 1. SMART DETECTION (Dataset-based - The Champion's Way)
+    # Smart Detection (The Image-Yaya Champion Way)
     is_style = detect_is_style(train_data_dir)
-    detection_method = "Dataset-driven"
+    detection_method = "Dataset-driven (25% Style Threshold)"
     
-    # 2. FALLBACK DETECTION (Metadata-based) - ONLY IF DATASET IS UNCERTAIN
-    # If dataset says its STYLE (True), we trust it.
-    # If dataset says its PERSON (False), we only override if repository name is EXPLICITLY about style.
+    # Simple Metadata Fallback (Only if explicitly named)
     if not is_style:
-        # Check if the repo name forcefully suggests style (rare case)
-        if expected_repo_name and "style" in expected_repo_name.lower() and "person" not in expected_repo_name.lower():
-             is_style = True
-             detection_method = "Metadata-driven (Forced Style)"
-        else:
-             detection_method = "Dataset-driven (Verified Person)"
+         if expected_repo_name and "style" in expected_repo_name.lower() and "person" not in expected_repo_name.lower():
+              is_style = True
+              detection_method = "Metadata-forced"
 
     task_type = "style" if is_style else "person"
     print(f"DEBUG_TYPE: Task detected as [{task_type.upper()}] via {detection_method}", flush=True)

@@ -24,14 +24,14 @@ CONTAINER_START_RETRY_DELAY_SECONDS = 3
 
 #TRAINING PATHS 
 CACHE_ROOT_PATH = "/cache"
-HUGGINGFACE_CACHE_PATH = "/cache/hf_cache"
+HUGGINGFACE_CACHE_PATH = "/tmp/hf_cache"
 OUTPUT_CHECKPOINTS_PATH = "/app/checkpoints/"
 CACHE_MODELS_DIR = "/cache/models"
 CACHE_DATASETS_DIR = "/cache/datasets"
 WANDB_LOGS_DIR = "/app/checkpoints/wandb_logs"
 IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH = "/workspace/core/config"
-IMAGE_CONTAINER_CONFIG_SAVE_PATH = "/cache/configs"
-IMAGE_CONTAINER_IMAGES_PATH = "/cache/images"
+IMAGE_CONTAINER_CONFIG_SAVE_PATH = "/tmp/configs"
+IMAGE_CONTAINER_IMAGES_PATH = "/tmp/images"
 
 TEXT_CONTAINER_SAVE_PATH = "/workspace/axolotl/outputs/"
 

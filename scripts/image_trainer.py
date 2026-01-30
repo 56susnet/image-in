@@ -272,7 +272,8 @@ def detect_is_style(train_data_dir):
             for style in style_list:
                 if style.lower() in prompt:
                     style_matches[style] += 1
-                # KALKULASI DOMINASI & KEPUTUSAN FINAL
+        
+        # KALKULASI DOMINASI & KEPUTUSAN FINAL
         prompt_total = len(prompts)
         person_ratio = person_count / prompt_total if prompt_total > 0 else 0
         

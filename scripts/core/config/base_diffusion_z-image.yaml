@@ -1,5 +1,3 @@
-# PROOF OF EMPIRE BASE (Z-IMAGE)
-# Reverse Config (Jordansky)
 job: extension
 config:
   name: last
@@ -9,8 +7,10 @@ config:
     device: cuda
     network:
       type: lora
-      linear: 32
-      linear_alpha: 32
+      linear: 64
+      linear_alpha: 64
+      conv: 32
+      conv_alpha: 32
     save:
       dtype: bf16
       save_every: 250
@@ -31,17 +31,19 @@ config:
       noise_scheduler: flowmatch
       timestep_type: weighted
       dtype: bf16
+      optimizer_params:
+        weight_decay: 1e-5
       ema_config:
         use_ema: true
-        ema_decay: 0.999
+        ema_decay: 0.995
     model:
       name_or_path: /cache/models
       arch: zimage:turbo
       quantize: true
       qtype: qfloat8
       quantize_te: true
-      # Local Path Fix for Offline Compatibility
+      qtype_te: qfloat8
       assistant_lora_path: /cache/hf_cache/zimage_turbo_training_adapter_v2.safetensors
 meta:
-  name: zimage_lora_empire_base
+  name: zimage_lora
   version: '1.0'

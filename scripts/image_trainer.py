@@ -386,8 +386,8 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         699: {"network_dim": 96, "network_alpha": 96, "network_args": ["conv_dim=32", "conv_alpha=32", "algo=locon"]},
         900: {"network_dim": 128, "network_alpha": 128, "network_args": ["conv_dim=32", "conv_alpha=32", "algo=locon"]},
         500: {"network_dim": 64, "network_alpha": 64, "network_args": ["conv_dim=4", "conv_alpha=4", "dropout=0"]},
-        350: {"network_dim": 128, "network_alpha": 128, "network_args": ["train_double_block_indices=all", "train_single_block_indices=all", "train_t5xxl=True"]},
-        999: {"network_dim": 32, "network_alpha": 32, "network_args": ["conv_dim=32", "conv_alpha=32"]}
+        999: {"network_dim": 64, "network_alpha": 64, "network_args": ["conv_dim=32", "conv_alpha=32"]},
+        350: {"network_dim": 128, "network_alpha": 128, "network_args": ["train_double_block_indices=all", "train_single_block_indices=all", "train_t5xxl=True"]}
     }
 
     # CEK IDENTITAS MESIN (SMART DETECTION QWEN/Z-IMAGE/SDXL).
@@ -396,7 +396,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     elif model_type == ImageModelType.FLUX.value:
         config_id = network_config_flux.get(model_name, 350)
     elif model_type == ImageModelType.QWEN_IMAGE.value:
-        config_id = None 
+        config_id = 350 # QWEN PAKAI RANK 128 SEPERTI FLUX/CHAMPION
     else:
         target_dict = network_config_style if is_style else network_config_person
         config_id = target_dict.get(model_name, 235)
@@ -466,15 +466,16 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     return int(epochs * (dataset_size * rep_factor / batch_size))
 
              
-                if size_config:
-                    for key, value in size_config.items():
-                        if key == "max_train_epochs": process['train']['steps'] = calculate_steps(value)
-                        elif key == "optimizer_type": process['train']['optimizer'] = value
-                        elif key in ["rank", "alpha"]:
-                            block = 'network' if 'network' in process else 'adapter'
-                            if block not in process: process[block] = {}
-                            process[block][key if block == 'adapter' else ('linear' if key == 'rank' else 'linear_alpha')] = value
-                        else: process['train'][key] = value
+                # Size config overrides removed
+                # if size_config:
+                #     for key, value in size_config.items():
+                #         if key == "max_train_epochs": process['train']['steps'] = calculate_steps(value)
+                #         elif key == "optimizer_type": process['train']['optimizer'] = value
+                #         elif key in ["rank", "alpha"]:
+                #             block = 'network' if 'network' in process else 'adapter'
+                #             if block not in process: process[block] = {}
+                #             process[block][key if block == 'adapter' else ('linear' if key == 'rank' else 'linear_alpha')] = value
+                #         else: process['train'][key] = value
 
              
                 if lrs_settings:
@@ -506,12 +507,9 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                 if trigger_word:
                     process['trigger_word'] = trigger_word
 
-                # BATASI DURASI TURNAMEN (RUMUS JAM X 800 STEPS)
-                if (model_type in [ImageModelType.QWEN_IMAGE.value, ImageModelType.Z_IMAGE.value]) and hours_to_complete and hours_to_complete > 0:
-                    dynamic_steps = int(hours_to_complete * 800)
-                    print(f"[AUTO-ADAPTIVE] Adjusting steps to {dynamic_steps} for {hours_to_complete}h duration (800 steps/h).", flush=True)
-                    if 'train' in process:
-                        process['train']['steps'] = dynamic_steps
+                # Auto-Adaptive Duration Logic REMOVED (Replaced by Hard Kill Manager)
+                # if (model_type in [ImageModelType.QWEN_IMAGE.value, ImageModelType.Z_IMAGE.value]) and hours_to_complete and hours_to_complete > 0:
+                #     pass
         
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.yaml")
         save_config(config, config_path)

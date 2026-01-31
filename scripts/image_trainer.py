@@ -534,28 +534,33 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         if model_type == "flux":
             print(f"DEBUG: Performing FLUX asset discovery in {model_path}...", flush=True)
             
-            # Find Unet/Transformer - Kohya expects the ROOT if it's a diffusers structure
+            # Find Unet/Transformer - BE SPECIFIC TO AVOID Kohya's folder auto-appending
             transformer_dir = os.path.join(model_path, "transformer")
+            transformer_found = False
             if os.path.isdir(transformer_dir):
-                # If there's a transformer folder, pointing to root is correct for Kohya's discovery
-                config['pretrained_model_name_or_path'] = model_path
-                print(f"DEBUG: Found transformer folder, using root: {model_path}", flush=True)
-            elif model_path.endswith(".safetensors"):
-                config['pretrained_model_name_or_path'] = model_path
+                # Search for sharded index first, then single weighs file
+                for f in ["diffusion_pytorch_model.safetensors.index.json", "diffusion_pytorch_model.safetensors"]:
+                    target_p = os.path.join(transformer_dir, f)
+                    if os.path.exists(target_p):
+                        config['pretrained_model_name_or_path'] = target_p
+                        print(f"DEBUG: Found specific transformer file: {target_p}", flush=True)
+                        transformer_found = True
+                        break
             
+            # Fallback to model_path if not found specifically in subfolder
+            if not transformer_found and model_path.endswith(".safetensors"):
+                config['pretrained_model_name_or_path'] = model_path
+
             def find_first_file(dir_path, extensions=[".safetensors", ".bin", ".pt"]):
                 if not os.path.isdir(dir_path): return dir_path
+                # Sort to prefer safetensors over bin
                 for ext in extensions:
-                    for f in os.listdir(dir_path):
+                    for f in sorted(os.listdir(dir_path), reverse=True):
                         if f.endswith(ext): return os.path.join(dir_path, f)
                 return dir_path
 
             # Find T5 XXL - Crucial for offline
-            t5_paths = [
-                os.path.join(model_path, "t5xxl"),
-                os.path.join(os.path.dirname(model_path), "google--t5-v1_1-xxl"),
-                "/cache/models/google--t5-v1_1-xxl"
-            ]
+            t5_paths = [os.path.join(model_path, "t5xxl"), "/cache/models/google--t5-v1_1-xxl"]
             for p in t5_paths:
                 if os.path.exists(p):
                     config['t5xxl'] = find_first_file(p)
@@ -563,11 +568,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     break
             
             # Find CLIP L
-            clip_paths = [
-                os.path.join(model_path, "clip_l"),
-                os.path.join(os.path.dirname(model_path), "openai--clip-vit-large-patch14"),
-                "/cache/models/openai--clip-vit-large-patch14"
-            ]
+            clip_paths = [os.path.join(model_path, "clip_l"), "/cache/models/openai--clip-vit-large-patch14"]
             for p in clip_paths:
                 if os.path.exists(p):
                     config['clip_l'] = find_first_file(p)
@@ -575,11 +576,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     break
 
             # Find VAE / AE
-            ae_paths = [
-                os.path.join(model_path, "ae"),
-                os.path.join(model_path, "vae"),
-                os.path.join(os.path.dirname(model_path), "ae")
-            ]
+            ae_paths = [os.path.join(model_path, "ae"), os.path.join(model_path, "vae")]
             for p in ae_paths:
                 if os.path.exists(p):
                     config['ae'] = find_first_file(p)

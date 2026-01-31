@@ -288,9 +288,18 @@ def detect_is_style(train_data_dir):
         
         print(f"DEBUG_CLASSIFY: Person Ratio: {person_ratio:.2f}, Max Style Ratio: {max_style_ratio:.2f} ({top_style})", flush=True)
 
-        if max_style_ratio >= 0.25 and person_ratio < 0.10:
+        # LOGIC DETEKSI BARU (LEBIH SENSITIF TERHADAP STYLE)
+        # 1. Jika sinyal Style sangat kuat (> 20%), kita abaikan keberadaan Orang (misal: "Oil Painting of a Woman").
+        if max_style_ratio >= 0.20:
+            print("DEBUG_CLASSIFY: Decision -> [STYLE] (Strong Signal)", flush=True)
+            return True
+            
+        # 2. Jika sinyal Style moderat (> 10%) dan Orang tidak mendominasi (< 20%).
+        if max_style_ratio >= 0.10 and person_ratio < 0.20:
+            print("DEBUG_CLASSIFY: Decision -> [STYLE] (Moderate Signal)", flush=True)
             return True
         
+        print("DEBUG_CLASSIFY: Decision -> [PERSON] (Default)", flush=True)
         return False
         
     except Exception as e:

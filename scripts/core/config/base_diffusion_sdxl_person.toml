@@ -15,6 +15,7 @@ huber_c = 0.1
 huber_schedule = "snr"
 
 pretrained_model_name_or_path = "/cache/models"
+tokenizer_cache_dir = "/cache/hf_cache"
 v_parameterization = false
 
 no_half_vae = true

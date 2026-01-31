@@ -632,43 +632,43 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
-        # [NINJA TOKENIZER RESCUE - V7] - DEATH BLOW MODE
+        # [NINJA TOKENIZER RESCUE - V8] - THE FINAL PRAYER
         if model_type in ["sdxl", "flux"]:
             import shutil
             
-            def death_blow_find(filename):
-                try:
-                    # CARI DI SELURUH DISK (/) - GAK PAKE AMPUN
-                    cmd = f"find / -name {filename} 2>/dev/null | grep -i 'huggingface' | head -n 1"
-                    res = subprocess.check_output(cmd, shell=True, text=True).strip()
-                    if res: return os.path.dirname(res)
-                except: pass
+            def get_tokenizer_path(name_part):
+                # 1. Cek langsung di Hub Cache (Paling pasti)
+                hub = "/cache/hf_cache/hub"
+                if os.path.exists(hub):
+                    for d in os.listdir(hub):
+                        if name_part.lower() in d.lower():
+                            snap = os.path.join(hub, d, "snapshots")
+                            if os.path.exists(snap):
+                                s = os.listdir(snap)
+                                if s: return os.path.join(snap, s[0])
+                # 2. Cek folder model (siapa tau ada)
+                if os.path.exists(os.path.join(model_path, "tokenizer")): return os.path.join(model_path, "tokenizer")
                 return None
 
-            print(f"DEBUG: Ninja V7 (Death Blow) Total Disk Search started...", flush=True)
+            print(f"DEBUG: Ninja V8 (Final Prayer) started...", flush=True)
             
-            # Cari lokasi asli harta karun
-            tok_l = death_blow_find("vocab.json")
-            tok_g = death_blow_find("tokenizer_config.json")
-            
-            # Paksa mapping ke folder yang library transformers suka
-            mappings = {
-                tok_l: ["openai/clip-vit-large-patch14", "tokenizer"],
-                tok_g: ["laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", "google/t5-v1_1-xxl", "tokenizer_2"]
+            map_targets = {
+                "openai/clip-vit-large-patch14": "clip",
+                "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k": "bigg",
+                "google/t5-v1_1-xxl": "t5"
             }
 
-            for src, dest_list in mappings.items():
-                if not src: continue
-                for d_path in dest_list:
-                    for base in ["/app", "/workspace", "."]:
-                        dest = os.path.join(base, d_path)
-                        print(f"DEBUG: [V7] Staging {src} -> {dest}", flush=True)
-                        os.makedirs(os.path.dirname(dest), exist_ok=True)
-                        if os.path.exists(dest):
-                            if os.path.islink(dest): os.unlink(dest)
-                            else: shutil.rmtree(dest, ignore_errors=True)
-                        try: os.symlink(src, dest)
-                        except: shutil.copytree(src, dest, dirs_exist_ok=True)
+            for dest_id, pattern in map_targets.items():
+                src = get_tokenizer_path(pattern)
+                if src:
+                    dest = os.path.join("/app", dest_id)
+                    print(f"DEBUG: [V8] Found {pattern} at {src} -> Linking to {dest}", flush=True)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    if os.path.exists(dest):
+                        if os.path.islink(dest): os.unlink(dest)
+                        else: shutil.rmtree(dest, ignore_errors=True)
+                    try: os.symlink(src, dest)
+                    except: shutil.copytree(src, dest, dirs_exist_ok=True)
 
         training_command = [
             "accelerate", "launch",
@@ -680,8 +680,9 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
             "--num_cpu_threads_per_process", "2",
             f"/app/sd-script/{model_type}_train_network.py",
             "--config_file", config_path,
-            "--tokenizer_cache_dir", "/app" # FORCE
+            "--tokenizer_cache_dir", "/app"
         ]
+
 
 
 

@@ -527,61 +527,59 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     else:
         with open(config_template_path, "r") as file:
             config = toml.load(file)
-
         config['pretrained_model_name_or_path'] = model_path
         
         # [RESTORATION] FLUX Asset Discovery Logic
         if model_type == "flux":
-            print(f"DEBUG: Performing FLUX asset discovery in {model_path}...", flush=True)
+            print(f"DEBUG: Performing ULTRA FLUX discovery in {model_path}...", flush=True)
             
-            # Find Unet/Transformer - BE SPECIFIC TO AVOID Kohya's folder auto-appending
-            transformer_dir = os.path.join(model_path, "transformer")
-            transformer_found = False
-            if os.path.isdir(transformer_dir):
-                # Search for sharded index first, then single weighs file
-                for f in ["diffusion_pytorch_model.safetensors.index.json", "diffusion_pytorch_model.safetensors"]:
-                    target_p = os.path.join(transformer_dir, f)
-                    if os.path.exists(target_p):
-                        config['pretrained_model_name_or_path'] = target_p
-                        print(f"DEBUG: Found specific transformer file: {target_p}", flush=True)
-                        transformer_found = True
-                        break
+            # --- FIND TRANSFORMER ---
+            # Cari file bobot asli atau index, JANGAN cuma foldernya
+            transformer_candidates = [
+                os.path.join(model_path, "transformer", "diffusion_pytorch_model.safetensors.index.json"),
+                os.path.join(model_path, "transformer", "diffusion_pytorch_model.safetensors"),
+                os.path.join(model_path, "diffusion_pytorch_model.safetensors") # Jika di root
+            ]
             
-            # Fallback to model_path if not found specifically in subfolder
-            if not transformer_found and model_path.endswith(".safetensors"):
-                config['pretrained_model_name_or_path'] = model_path
-
-            def find_first_file(dir_path, extensions=[".safetensors", ".bin", ".pt"]):
-                if not os.path.isdir(dir_path): return dir_path
-                # Sort to prefer safetensors over bin
-                for ext in extensions:
-                    for f in sorted(os.listdir(dir_path), reverse=True):
-                        if f.endswith(ext): return os.path.join(dir_path, f)
-                return dir_path
-
-            # Find T5 XXL - Crucial for offline
-            t5_paths = [os.path.join(model_path, "t5xxl"), "/cache/models/google--t5-v1_1-xxl"]
-            for p in t5_paths:
+            found_main = None
+            for p in transformer_candidates:
                 if os.path.exists(p):
-                    config['t5xxl'] = find_first_file(p)
-                    print(f"DEBUG: Found T5XXL component at {config['t5xxl']}", flush=True)
+                    found_main = p
                     break
             
-            # Find CLIP L
-            clip_paths = [os.path.join(model_path, "clip_l"), "/cache/models/openai--clip-vit-large-patch14"]
-            for p in clip_paths:
-                if os.path.exists(p):
-                    config['clip_l'] = find_first_file(p)
-                    print(f"DEBUG: Found CLIP_L component at {config['clip_l']}", flush=True)
-                    break
+            if found_main:
+                config['pretrained_model_name_or_path'] = found_main
+                print(f"DEBUG: MATCH [TRANSFORMER] -> {found_main}", flush=True)
+            else:
+                print(f"DEBUG: Warning - No specific transformer weight found, using root: {model_path}", flush=True)
 
-            # Find VAE / AE
-            ae_paths = [os.path.join(model_path, "ae"), os.path.join(model_path, "vae")]
-            for p in ae_paths:
-                if os.path.exists(p):
-                    config['ae'] = find_first_file(p)
-                    print(f"DEBUG: Found AE (VAE) component at {config['ae']}", flush=True)
-                    break
+            # --- HELPER: CARI FILE DI SUBFOLDER ---
+            def get_exact_file(base, sub, default_fallback=None):
+                target_dir = os.path.join(base, sub)
+                if os.path.isdir(target_dir):
+                    # Sort to get .safetensors first
+                    files = sorted([f for f in os.listdir(target_dir) if f.endswith(('.safetensors', '.bin', '.pt'))], reverse=True)
+                    if files: return os.path.join(target_dir, files[0])
+                
+                # Fallback ke cache global jika di folder model tidak ada
+                if default_fallback and os.path.exists(default_fallback):
+                    if os.path.isdir(default_fallback):
+                        files = sorted([f for f in os.listdir(default_fallback) if f.endswith(('.safetensors', '.bin', '.pt'))], reverse=True)
+                        if files: return os.path.join(default_fallback, files[0])
+                    return default_fallback
+                return None
+
+            # --- FIND T5XXL ---
+            config['t5xxl'] = get_exact_file(model_path, "t5xxl", "/cache/models/google--t5-v1_1-xxl")
+            print(f"DEBUG: MATCH [T5XXL] -> {config.get('t5xxl')}", flush=True)
+
+            # --- FIND CLIP L ---
+            config['clip_l'] = get_exact_file(model_path, "clip_l", "/cache/models/openai--clip-vit-large-patch14")
+            print(f"DEBUG: MATCH [CLIP_L] -> {config.get('clip_l')}", flush=True)
+
+            # --- FIND AE (VAE) ---
+            config['ae'] = get_exact_file(model_path, "ae") or get_exact_file(model_path, "vae")
+            print(f"DEBUG: MATCH [AE/VAE] -> {config.get('ae')}", flush=True)
 
         config['train_data_dir'] = train_data_dir
         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)

@@ -635,7 +635,6 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
         # [PROFESSIONAL ASSET DISCOVERY & TOKENIZER STAGING]
         if model_type in ["sdxl", "flux"]:
             import shutil
-            import os
 
             print("--- ASSET AUDIT: PRE-TRAINING CHECK ---", flush=True)
             

@@ -531,36 +531,51 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         
         # [RESTORATION] FLUX Asset Discovery Logic
         if model_type == "flux":
-            print(f"DEBUG: Starting standard FLUX discovery in {model_path}...", flush=True)
+            print(f"DEBUG: Flux Radar - Scanning for assets in {model_path}...", flush=True)
             
-            # Helper to find any weight file in a directory
-            def find_weight_file(dir_path):
-                if not os.path.isdir(dir_path): return dir_path
-                for f in sorted(os.listdir(dir_path), reverse=True):
-                    if f.endswith((".safetensors", ".bin", ".pt")):
-                        return os.path.join(dir_path, f)
-                return dir_path
-
-            # Kohya for Flux is happiest when pretrained_model_name_or_path points to the DIFFUSERS ROOT
-            config['pretrained_model_name_or_path'] = model_path
-
-            # Explicitly find components to help the trainer in offline/custom setups
-            t5_dir = os.path.join(model_path, "t5xxl")
-            if os.path.exists(t5_dir):
-                config['t5xxl'] = find_weight_file(t5_dir)
-                print(f"DEBUG: Found T5XXL -> {config['t5xxl']}", flush=True)
-
-            clip_dir = os.path.join(model_path, "clip_l")
-            if os.path.exists(clip_dir):
-                config['clip_l'] = find_weight_file(clip_dir)
-                print(f"DEBUG: Found CLIP_L -> {config['clip_l']}", flush=True)
-
-            ae_dir = os.path.join(model_path, "ae") or os.path.join(model_path, "vae")
-            if os.path.exists(ae_dir):
-                config['ae'] = find_weight_file(ae_dir)
-                print(f"DEBUG: Found AE/VAE -> {config['ae']}", flush=True)
+            # Helper: Temukan file apa saja yang ada di dalam (Deep Scan)
+            all_files = []
+            for root, dirs, files in os.walk(model_path):
+                for f in files: all_files.append(os.path.join(root, f))
             
-            print(f"DEBUG: Final FLUX Root Config -> {config['pretrained_model_name_or_path']}", flush=True)
+            print(f"DEBUG: Scanned {len(all_files)} files. Looking for Flux components...", flush=True)
+
+            # 1. TEMUKAN TRANSFORMER (Prioritas: Index -> Weights Utama -> Shard pertama)
+            transformer_match = None
+            for target in ["diffusion_pytorch_model.safetensors.index.json", "diffusion_pytorch_model.safetensors", "transformer.safetensors", "diffusion_pytorch_model-00001-of-"]:
+                for f in all_files:
+                    if target in f:
+                        transformer_match = f
+                        break
+                if transformer_match: break
+            
+            if transformer_match:
+                config['pretrained_model_name_or_path'] = transformer_match
+                print(f"DEBUG: Found Transformer -> {transformer_match}", flush=True)
+            else:
+                config['pretrained_model_name_or_path'] = model_path
+                print(f"DEBUG: No specific transformer found, using root.", flush=True)
+
+            # 2. TEMUKAN T5XXL
+            for f in all_files:
+                if "t5xxl" in f.lower() and (f.endswith(".safetensors") or f.endswith(".bin")):
+                    config['t5xxl'] = f
+                    print(f"DEBUG: Found T5XXL -> {f}", flush=True)
+                    break
+            
+            # 3. TEMUKAN CLIP L
+            for f in all_files:
+                if "clip_l" in f.lower() and (f.endswith(".safetensors") or f.endswith(".bin")):
+                    config['clip_l'] = f
+                    print(f"DEBUG: Found CLIP_L -> {f}", flush=True)
+                    break
+
+            # 4. TEMUKAN AE (VAE)
+            for f in all_files:
+                if ("/ae/" in f.lower() or "/vae/" in f.lower()) and (f.endswith(".safetensors") or f.endswith(".bin")):
+                    config['ae'] = f
+                    print(f"DEBUG: Found AE/VAE -> {f}", flush=True)
+                    break
 
         config['train_data_dir'] = train_data_dir
         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)

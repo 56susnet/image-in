@@ -632,53 +632,40 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
-        # [NINJA TOKENIZER RESCUE - V5] - THE TERMINATOR
+        # [NINJA TOKENIZER RESCUE - V6] - BUMI HANGUS MODE
         if model_type in ["sdxl", "flux"]:
             import shutil
             
-            def terminator_find(pattern):
-                # 1. Jalur Pintas: Langsung cek folder HF Hub Cache
-                hub_path = "/cache/hf_cache/hub"
-                if os.path.exists(hub_path):
-                    for d in os.listdir(hub_path):
-                        # Hubungkan models--openai--clip... jadi openai/clip...
-                        clean_d = d.replace("models--", "").replace("--", "/")
-                        if pattern in clean_d:
-                            snap_dir = os.path.join(hub_path, d, "snapshots")
-                            if os.path.exists(snap_dir):
-                                snps = os.listdir(snap_dir)
-                                if snps: return os.path.join(snap_dir, snps[0])
-                
-                # 2. Fallback: Cari di /cache tapi dibatasi (Depth Limit)
-                for base in ["/cache", "/app"]:
-                    if not os.path.exists(base): continue
-                    for root, dirs, files in os.walk(base):
-                        # Cek kedalaman biar gak macet
-                        if root.count(os.sep) - base.count(os.sep) > 5: 
-                            del dirs[:]
-                            continue
-                        if pattern in root.lower() and ("vocab.json" in files or "tokenizer_config.json" in files):
-                            return root
+            def ninja_find(filename):
+                try:
+                    # Cari pake shell find, jauh lebih nembus dibanding python walk
+                    cmd = f"find /cache /app /workspace -name {filename} 2>/dev/null | head -n 1"
+                    res = subprocess.check_output(cmd, shell=True, text=True).strip()
+                    if res: return os.path.dirname(res)
+                except: pass
                 return None
 
-            print(f"DEBUG: Ninja Terminator Search V5 started...", flush=True)
-            staging_map = {
-                "openai/clip-vit-large-patch14": "clip",
-                "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k": "bigg",
-                "google/t5-v1_1-xxl": "t5"
-            }
-
-            for dest_id, pattern in staging_map.items():
-                src = terminator_find(pattern)
-                if src:
-                    dest = os.path.join("/app", dest_id)
-                    print(f"DEBUG: [TERMINATOR] Found {pattern} at {src} -> Staging to {dest}", flush=True)
-                    os.makedirs(os.path.dirname(dest), exist_ok=True)
-                    if os.path.exists(dest):
-                        if os.path.islink(dest): os.unlink(dest)
-                        else: shutil.rmtree(dest, ignore_errors=True)
-                    try: os.symlink(src, dest)
-                    except: shutil.copytree(src, dest, dirs_exist_ok=True)
+            print(f"DEBUG: Ninja V6 (Bumi Hangus) Search started...", flush=True)
+            
+            # Cari satu-satu pake find
+            tok_l = ninja_find("vocab.json") # CLIP L
+            tok_g = ninja_find("tokenizer_config.json") # CLIP G / T5
+            
+            if tok_l:
+                dest = "/app/openai/clip-vit-large-patch14"
+                print(f"DEBUG: [V6] Found CLIP L at {tok_l} -> Link to {dest}", flush=True)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                if os.path.exists(dest): shutil.rmtree(dest, ignore_errors=True)
+                try: os.symlink(tok_l, dest)
+                except: shutil.copytree(tok_l, dest, dirs_exist_ok=True)
+            
+            if tok_g:
+                dest = "/app/laion/CLIP-ViT-bigG-14-laion2B-39B-b160k"
+                print(f"DEBUG: [V6] Found CLIP G at {tok_g} -> Link to {dest}", flush=True)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                if os.path.exists(dest): shutil.rmtree(dest, ignore_errors=True)
+                try: os.symlink(tok_g, dest)
+                except: shutil.copytree(tok_g, dest, dirs_exist_ok=True)
 
         training_command = [
             "accelerate", "launch",
@@ -689,8 +676,10 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
             "--num_machines", "1",
             "--num_cpu_threads_per_process", "2",
             f"/app/sd-script/{model_type}_train_network.py",
-            "--config_file", config_path
+            "--config_file", config_path,
+            "--tokenizer_cache_dir", "/app" # FORCE SEARCH DI /app
         ]
+
 
     try:
         print(f"Launching {model_type.upper()} training with command: {' '.join(training_command)}", flush=True)

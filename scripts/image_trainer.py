@@ -607,7 +607,13 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
             missing = [k for k in ['ae', 'clip_l', 't5xxl'] if not os.path.exists(config.get(k, ""))]
             if missing:
                 def search_for_flux_files():
-                    search_bases = ["/cache/models", "/app/models", "/app/flux", "/workspace/models", os.path.dirname(model_path)]
+                    search_bases = [
+                        "/cache/models", 
+                        "/cache/hf_cache", # WAJIB: Tempat Downloader menaruh snapshot
+                        "/app/models", 
+                        "/app/flux", 
+                        os.path.dirname(model_path)
+                    ]
                     found = []
                     for b_dir in search_bases:
                         if not os.path.exists(b_dir): continue
@@ -615,8 +621,10 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                             for f in files:
                                 if f.endswith(".safetensors"):
                                     p = os.path.join(root, f)
-                                    sz = os.path.getsize(p) / (1024**3)
-                                    found.append({"path": p, "size": sz, "root": root})
+                                    try:
+                                        sz = os.path.getsize(p) / (1024**3)
+                                        found.append({"path": p, "size": sz, "root": root})
+                                    except: continue
                     return found
 
                 files_found = search_for_flux_files()
@@ -682,8 +690,14 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
 
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
     env = os.environ.copy()
+    
+    # SINKRONISASI TOTAL DENGAN FLUX_TEST.SH & DOWNLOADER
+    target_cache = "/cache/hf_cache" 
     env.update({
-        "HF_HOME": train_cst.HUGGINGFACE_CACHE_PATH,
+        "HF_HOME": target_cache,
+        "TRANSFORMERS_CACHE": target_cache,
+        "HF_DATASETS_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
         "PYTHONUNBUFFERED": "1"
     })
 

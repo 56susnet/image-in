@@ -632,56 +632,47 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
-        # [NINJA TOKENIZER RESCUE] - SEARCH GLOBAL IF LOCAL FAILED
+        # [NINJA TOKENIZER RESCUE - V3] - EXTREME SHELL SEARCH
         if model_type in ["sdxl", "flux"]:
             import shutil
             
-            def find_global_tokenizers():
-                # [EXTREME SEARCH] Cari file kunci di mana pun di /cache
-                targets = {
-                    "clip_l": "vocab.json",
-                    "clip_g": "tokenizer_config.json",
-                    "t5": "special_tokens_map.json"
-                }
-                results = {}
-                for r in ["/cache", "/app", "/workspace"]:
-                    if not os.path.exists(r): continue
-                    for root, dirs, files in os.walk(r):
-                        if any(x in root.lower() for x in ["output", "checkpoint", "sample", "dataset"]): continue
-                        
-                        for key, filename in targets.items():
-                            if key in results: continue
-                            if filename in files:
-                                # Verifikasi ini beneran tokenizer (bukan file nyasar)
-                                if key == "clip_l" and "clip" in root.lower():
-                                    results[key] = root
-                                elif key == "clip_g" and "clip" in root.lower() and "tokenizer_2" in root.lower():
-                                    results[key] = root
-                                elif key == "t5" and "t5" in root.lower():
-                                    results[key] = root
-                return results
+            def ninja_shell_find(filename, keyword):
+                try:
+                    # Gunakan 'find' shell agar jauh lebih cepat dan akurat nembus folder hash
+                    cmd = f"find /cache /app /workspace -name {filename} 2>/dev/null | grep -i '{keyword}' | head -n 1"
+                    res = subprocess.check_output(cmd, shell=True, text=True).strip()
+                    if res: return os.path.dirname(res)
+                except: pass
+                return None
 
-            print(f"DEBUG: Extreme Ninja Tokenizer Search started...", flush=True)
+            print(f"DEBUG: Ninja Tokenizer Search (Shell-Mode) started for {model_type}...", flush=True)
+            
+            targets = {
+                "clip_l": ("vocab.json", "clip-vit-large-patch14"),
+                "clip_g": ("tokenizer_config.json", "clip-vit-bigg-14"),
+                "t5": ("special_tokens_map.json", "t5")
+            }
             staging_map = {
                 "clip_l": "openai/clip-vit-large-patch14",
                 "clip_g": "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k",
                 "t5": "google/t5-v1_1-xxl"
             }
 
-            found_tokenizers = find_global_tokenizers()
-            for key, src in found_tokenizers.items():
-                dest = staging_map[key]
-                print(f"DEBUG: [NINJA] Found {key} at {src} -> Staging to {dest}", flush=True)
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                if os.path.exists(dest): 
-                    if os.path.islink(dest): os.unlink(dest)
-                    else: shutil.rmtree(dest)
+            for key, (filename, keyword) in targets.items():
+                src = ninja_shell_find(filename, keyword)
+                if not src and "clip" in key: src = ninja_shell_find(filename, "clip") # Fallback search
                 
-                # Gunakan Symlink biar kenceng
-                try:
-                    os.symlink(src, dest)
-                except:
-                    shutil.copytree(src, dest)
+                if src:
+                    dest = staging_map[key]
+                    print(f"DEBUG: [NINJA-V3] Found {key} at {src} -> Staging to {dest}", flush=True)
+                    # Stage to both current dir and /app to ensure absolute pick-up
+                    for final_dest in [dest, os.path.join("/app", dest)]:
+                        os.makedirs(os.path.dirname(final_dest), exist_ok=True)
+                        if os.path.exists(final_dest): 
+                            if os.path.islink(final_dest): os.unlink(final_dest)
+                            else: shutil.rmtree(final_dest, ignore_errors=True)
+                        try: os.symlink(src, final_dest)
+                        except: shutil.copytree(src, final_dest, dirs_exist_ok=True)
 
         training_command = [
             "accelerate", "launch",

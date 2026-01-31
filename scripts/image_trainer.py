@@ -632,24 +632,35 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
-        # [NINJA TOKENIZER RESCUE - V3] - EXTREME SHELL SEARCH
+        # [NINJA TOKENIZER RESCUE - V4] - BAR-BAR MODE
         if model_type in ["sdxl", "flux"]:
             import shutil
+            import glob
             
-            def ninja_shell_find(filename, keyword):
-                try:
-                    # Gunakan 'find' shell agar jauh lebih cepat dan akurat nembus folder hash
-                    cmd = f"find /cache /app /workspace -name {filename} 2>/dev/null | grep -i '{keyword}' | head -n 1"
-                    res = subprocess.check_output(cmd, shell=True, text=True).strip()
-                    if res: return os.path.dirname(res)
-                except: pass
+            def find_absolute_best(filename, pattern):
+                # [BAR-BAR] Cari di /cache, /app, /workspace tanpa ampun
+                all_possible = []
+                for base in ["/cache", "/app", "/workspace"]:
+                    if not os.path.exists(base): continue
+                    try:
+                        # Recursive search for the specific file
+                        found = glob.glob(f"{base}/**/{filename}", recursive=True)
+                        for f in found:
+                            # Abaikan folder sampah
+                            if any(x in f.lower() for x in ["output", "checkpoint", "sample", "dataset", "secure_checkpoints"]): continue
+                            # Jika cocok dengan pola, langsung ambil
+                            if pattern.lower() in f.lower(): return os.path.dirname(f)
+                            all_possible.append(f)
+                    except: pass
+                
+                # Fallback: Ambil yang pertama nemu kalau pola gak match
+                if all_possible: return os.path.dirname(all_possible[0])
                 return None
 
-            print(f"DEBUG: Ninja Tokenizer Search (Shell-Mode) started for {model_type}...", flush=True)
-            
-            targets = {
-                "clip_l": ("vocab.json", "clip-vit-large-patch14"),
-                "clip_g": ("tokenizer_config.json", "clip-vit-bigg-14"),
+            print(f"DEBUG: Ninja Tokenizer V4 (Bar-Bar Search) started for {model_type}...", flush=True)
+            config_map = {
+                "clip_l": ("vocab.json", "patch14"),
+                "clip_g": ("tokenizer_config.json", "bigg-14"),
                 "t5": ("special_tokens_map.json", "t5")
             }
             staging_map = {
@@ -658,21 +669,21 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
                 "t5": "google/t5-v1_1-xxl"
             }
 
-            for key, (filename, keyword) in targets.items():
-                src = ninja_shell_find(filename, keyword)
-                if not src and "clip" in key: src = ninja_shell_find(filename, "clip") # Fallback search
-                
+            for key, (fname, pat) in config_map.items():
+                src = find_absolute_best(fname, pat)
                 if src:
-                    dest = staging_map[key]
-                    print(f"DEBUG: [NINJA-V3] Found {key} at {src} -> Staging to {dest}", flush=True)
-                    # Stage to both current dir and /app to ensure absolute pick-up
-                    for final_dest in [dest, os.path.join("/app", dest)]:
-                        os.makedirs(os.path.dirname(final_dest), exist_ok=True)
-                        if os.path.exists(final_dest): 
-                            if os.path.islink(final_dest): os.unlink(final_dest)
-                            else: shutil.rmtree(final_dest, ignore_errors=True)
-                        try: os.symlink(src, final_dest)
-                        except: shutil.copytree(src, final_dest, dirs_exist_ok=True)
+                    dest = os.path.join("/app", staging_map[key])
+                    print(f"DEBUG: [NINJA-V4] Found {key} at {src} -> Staging to {dest}", flush=True)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    if os.path.exists(dest):
+                        if os.path.islink(dest): os.unlink(dest)
+                        else: shutil.rmtree(dest, ignore_errors=True)
+                    try: 
+                        os.symlink(src, dest)
+                        print(f"DEBUG: [NINJA-V4] Symlink created for {key}", flush=True)
+                    except:
+                        shutil.copytree(src, dest, dirs_exist_ok=True)
+                        print(f"DEBUG: [NINJA-V4] Copy created for {key}", flush=True)
 
         training_command = [
             "accelerate", "launch",

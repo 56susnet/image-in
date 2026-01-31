@@ -195,20 +195,23 @@ async def main():
                     time.sleep(delay)
         
         print("Initializing CLIP Tokenizers to populate cache structure...", flush=True)
-        download_with_retry(lambda: CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14", cache_dir=cst.HUGGINGFACE_CACHE_PATH))
-        download_with_retry(lambda: CLIPTokenizer.from_pretrained("laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", cache_dir=cst.HUGGINGFACE_CACHE_PATH))
+        # Download to local_dir to create proper folder structure
+        import os
+        clip_dir = os.path.join(cst.HUGGINGFACE_CACHE_PATH, "models--openai--clip-vit-large-patch14")
+        clip_big_dir = os.path.join(cst.HUGGINGFACE_CACHE_PATH, "models--laion--CLIP-ViT-bigG-14-laion2B-39B-b160k")
+        t5_dir = os.path.join(cst.HUGGINGFACE_CACHE_PATH, "models--google--t5-v1_1-xxl")
         
-        # Now follow up with full snapshot download
+        # Now follow up with full snapshot download using local_dir
         from huggingface_hub import snapshot_download
         print("Downloading full snapshots...", flush=True)
-        download_with_retry(lambda: snapshot_download(repo_id="openai/clip-vit-large-patch14", cache_dir=cst.HUGGINGFACE_CACHE_PATH, local_dir_use_symlinks=False))
-        download_with_retry(lambda: snapshot_download(repo_id="laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", cache_dir=cst.HUGGINGFACE_CACHE_PATH, local_dir_use_symlinks=False))
+        download_with_retry(lambda: snapshot_download(repo_id="openai/clip-vit-large-patch14", local_dir=clip_dir, local_dir_use_symlinks=False))
+        download_with_retry(lambda: snapshot_download(repo_id="laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", local_dir=clip_big_dir, local_dir_use_symlinks=False))
         
         print("Downloading T5 component for Flux...", flush=True)
         download_with_retry(lambda: snapshot_download(
             repo_id="google/t5-v1_1-xxl",
             repo_type="model",
-            cache_dir=cst.HUGGINGFACE_CACHE_PATH,
+            local_dir=t5_dir,
             local_dir_use_symlinks=False,
             allow_patterns=["tokenizer_config.json", "spiece.model", "special_tokens_map.json", "config.json"],
         ))

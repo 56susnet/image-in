@@ -527,37 +527,8 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     else:
         with open(config_template_path, "r") as file:
             config = toml.load(file)
-        # [RESTORATION] FLUX Asset Discovery Logic
-        if model_type == "flux":
-            print(f"DEBUG: Flux Guardian - Verifying model compatibility in {model_path}...", flush=True)
-            
-            # Check for standard Diffusers structure
-            transformer_path = os.path.join(model_path, "transformer")
-            is_valid_diffusers = os.path.isdir(transformer_path)
-            
-            # Check for direct safetensors weights
-            direct_weight = None
-            for f in ["diffusion_pytorch_model.safetensors", "transformer.safetensors"]:
-                p = os.path.join(model_path, f)
-                if os.path.exists(p):
-                    direct_weight = p
-                    break
-
-            if is_valid_diffusers:
-                print(f"DEBUG: Valid Diffusers structure found at {model_path}", flush=True)
-                config['pretrained_model_name_or_path'] = model_path
-            elif direct_weight:
-                print(f"DEBUG: Direct weights found at {direct_weight}", flush=True)
-                config['pretrained_model_name_or_path'] = direct_weight
-            else:
-                # Compatibility Fallback: The provided model is likely GGUF or incomplete
-                print(f"DEBUG: [NOTICE] Provided model format is incompatible. Using system base model: /app/flux/unet.safetensors", flush=True)
-                config['pretrained_model_name_or_path'] = "/app/flux/unet.safetensors"
-                config['ae'] = "/app/flux/ae.safetensors"
-                config['clip_l'] = "/app/flux/clip_l.safetensors"
-                config['t5xxl'] = "/app/flux/t5xxl_fp16.safetensors"
-
-            print(f"DEBUG: Final Training Path -> {config.get('pretrained_model_name_or_path')}", flush=True)
+        # [CLEANUP] Redundant Flux block removed to prioritize Surgical Fix below.
+        pass
 
         config['train_data_dir'] = train_data_dir
         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)
@@ -661,8 +632,8 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
-        # MAGIC FIX: STAGE TOKENIZER LOKAL UNTUK SDXL (BYPASS HF HUB)
-        if model_type == "sdxl" and model_path:
+        # MAGIC FIX: STAGE TOKENIZER LOKAL UNTUK SDXL/FLUX (BYPASS HF HUB)
+        if model_type in ["sdxl", "flux"]:
             import shutil
             
             # Tentukan direktori model (handle jika model_path adalah file safetensors)
@@ -706,9 +677,10 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
         
         # FORCE OFFLINE MODE & CACHE PATHS
         env = os.environ.copy()
-        env["HF_HUB_OFFLINE"] = "1"
-        env["TRANSFORMERS_OFFLINE"] = "1"
-        env["HF_HOME"] = "/cache/hf_cache" # Ensure this matches the volume mount
+        env["HF_HOME"] = "/cache/hf_cache"
+        env["TRANSFORMERS_CACHE"] = "/cache/hf_cache"
+        env["HF_DATASETS_CACHE"] = "/cache/hf_cache"
+        env["PYTHONUNBUFFERED"] = "1"
         
         process = subprocess.Popen(
             training_command,

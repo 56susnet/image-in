@@ -485,7 +485,34 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
 
         # TENTUKAN ALAMAT MODEL (BIAR KOHYA GAK NYASAR)
         if model_type == "flux":
-            config["pretrained_model_name_or_path"] = "/app/flux/unet"
+            # Cek apakah ada model pre-installed di /app/flux (Validator Mode)
+            if os.path.exists("/app/flux/unet"):
+                config["pretrained_model_name_or_path"] = "/app/flux/unet"
+                config["ae"] = "/app/flux/ae.safetensors"
+                config["clip_l"] = "/app/flux/clip_l.safetensors"
+                config["t5xxl"] = "/app/flux/t5xxl_fp16.safetensors"
+            else:
+                # Offline/Standalone Mode: Gunakan model_path hasil download
+                print(f"[FLUX-ADAPT] Pre-installed /app/flux not found. Using downloaded model at {model_path}", flush=True)
+                config["pretrained_model_name_or_path"] = model_path
+                
+                # Cek komponen di dalam folder download (Cari ae, clip, t5 secara cerdas)
+                model_dir = os.path.dirname(model_path) if model_path.endswith(".safetensors") else model_path
+                
+                def find_file_recursive(dir_path, pattern):
+                    for root, _, files in os.walk(dir_path):
+                        for f in files:
+                            if pattern.lower() in f.lower():
+                                return os.path.join(root, f)
+                    return None
+
+                flux_ae = find_file_recursive(model_dir, "ae.safetensors")
+                flux_clip = find_file_recursive(model_dir, "clip_l.safetensors")
+                flux_t5 = find_file_recursive(model_dir, "t5xxl")
+
+                if flux_ae: config["ae"] = flux_ae
+                if flux_clip: config["clip_l"] = flux_clip
+                if flux_t5: config["t5xxl"] = flux_t5
         else:
             config["pretrained_model_name_or_path"] = model_path
 

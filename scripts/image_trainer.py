@@ -580,14 +580,15 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                             del config["max_train_steps"]
                     config[key] = value
 
-        # [SURGICAL FIX] FLUX ASSET ENFORCEMENT - TOURNAMENT RESILIENCE (FROM CHAMPION AUDIT 07E71178)
+        # [SURGICAL FIX] FLUX ASSET ENFORCEMENT - LOGIKA JUARA (ADAPTASI 07E71178)
         if model_type == "flux":
             print("\n[FLUX GOD MODE] Starting precision asset fingerprinting...", flush=True)
             
-            # ENSURE MAIN MODEL PATH IS CORRECT
+            # SUNTIK MAIN MODEL PATH (MENGHINDARI SALAH CARI UNET)
             config['pretrained_model_name_or_path'] = model_path
-            print(f"   [VALIDATOR] Main Model Path: {model_path}", flush=True)
+            print(f"   [VALIDATOR] Main Model: {model_path}", flush=True)
             
+            # 1. HARD-PRIORITY (DIREKTORI STANDAR)
             std_paths = {
                 'ae': "/cache/models/ae.safetensors",
                 'clip_l': "/cache/models/clip_l.safetensors",
@@ -604,12 +605,14 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     set_flux_arg(key, path)
                     print(f"   [VALIDATOR] Found {key} at {path}", flush=True)
 
+            # 2. FALLBACK/DISCOVERY (MENCARI KE DALAM HF CACHE)
             missing = [k for k in ['ae', 'clip_l', 't5xxl'] if not os.path.exists(config.get(k, ""))]
             if missing:
                 def search_for_flux_files():
+                    # SEARCH BASES DISESUAIKAN DENGAN REALITA VPS BOS
                     search_bases = [
                         "/cache/models", 
-                        "/cache/hf_cache", # WAJIB: Tempat Downloader menaruh snapshot
+                        "/cache/hf_cache", # Kunci Utama
                         "/app/models", 
                         "/app/flux", 
                         os.path.dirname(model_path)
@@ -638,10 +641,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     path = find_surgical(files_found, "T5", 4.3, 11.0, avoid=["part", "of-", "shard"])
                     if path: set_flux_arg('t5xxl', path)
 
-            final_ae = config.get('ae')
-            final_clip = config.get('clip_l')
-            final_t5 = config.get('t5xxl')
-            print(f"[ASSET SYNC] AE: {final_ae}, CLIP: {final_clip}, T5: {final_t5}", flush=True)
+            print(f"[ASSET SYNC] AE: {config.get('ae')}, CLIP: {config.get('clip_l')}, T5: {config.get('t5xxl')}", flush=True)
 
         config['train_data_dir'] = train_data_dir
         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)
@@ -691,7 +691,8 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
     env = os.environ.copy()
     
-    # SINKRONISASI TOTAL DENGAN FLUX_TEST.SH & DOWNLOADER
+    # SINKRONISASI TOTAL DENGAN FLUX_TEST.SH & DOWNLOADER (PENTING!)
+    # Mengabaikan HUGGINGFACE_CACHE_PATH dari constants karena salah alamat (/tmp/hf_cache)
     target_cache = "/cache/hf_cache" 
     env.update({
         "HF_HOME": target_cache,
@@ -704,7 +705,7 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
-        # EXACT CHAMPION COMMAND (07E71178)
+        # EXACT CHAMPION COMMAND DARI COMMIT 07E71178
         training_command = [
             "accelerate", "launch",
             "--dynamo_backend", "no",

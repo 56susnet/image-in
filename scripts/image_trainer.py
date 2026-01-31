@@ -607,53 +607,51 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                             del config["max_train_steps"]
                     config[key] = value
 
-        # [FINAL LOCK] FLUX ASSET ENFORCEMENT - SIMPLE TOURNAMENT FIX
+        # [FINAL LOCK] FLUX ASSET ENFORCEMENT - EXTREME RESILIENCE
         if model_type == "flux":
-            print(f"DEBUG: Flux Asset Check for {model_path}...", flush=True)
+            print(f"DEBUG: Flux Extreme Recovery for {model_path}...", flush=True)
             
-            # 1. Cek apakah model utama valid (Diffusers atau Single Safetensors)
-            is_valid = os.path.isdir(os.path.join(model_path, "transformer")) or \
-                       os.path.exists(os.path.join(model_path, "diffusion_pytorch_model.safetensors"))
-            
-            if is_valid:
+            def find_any_flux_brain():
+                print("DEBUG: Deep Disk Scan for ANY Flux transformer...", flush=True)
+                for root_dir in ["/cache", "/app", "/workspace"]:
+                    if not os.path.exists(root_dir): continue
+                    for root, dirs, files in os.walk(root_dir):
+                        if "checkpoints" in root.lower() or "output" in root.lower(): continue
+                        for f in files:
+                            if f.endswith(".safetensors") and os.path.getsize(os.path.join(root, f)) > 10 * 1024**3:
+                                return os.path.join(root, f)
+                return None
+
+            # 1. Cek apakah model asli valid
+            if os.path.isdir(os.path.join(model_path, "transformer")):
                 config['pretrained_model_name_or_path'] = model_path
+            elif os.path.exists(os.path.join(model_path, "diffusion_pytorch_model.safetensors")):
+                 config['pretrained_model_name_or_path'] = os.path.join(model_path, "diffusion_pytorch_model.safetensors")
             else:
-                # 2. Fallback: Cari di folder /cache (tempat downloader naruh file)
-                print(f"DEBUG: Model invalid/GGUF. Searching cache for base...", flush=True)
-                found_base = None
-                for root in ["/cache/models", "/app/flux", "/workspace"]:
-                    if not os.path.exists(root): continue
-                    for d in os.listdir(root):
-                        d_path = os.path.join(root, d)
-                        if os.path.isdir(os.path.join(d_path, "transformer")):
-                            found_base = d_path
-                            break
-                        # Cek file tunggal besar (>10GB)
-                        if os.path.isfile(d_path) and d_path.endswith(".safetensors") and os.path.getsize(d_path) > 10 * 1024**3:
-                            found_base = d_path
-                            break
-                    if found_base: break
-                
-                if found_base:
-                    print(f"DEBUG: [RESOLVED] Using Base -> {found_base}", flush=True)
-                    config['pretrained_model_name_or_path'] = found_base
+                # 2. EMERGENCY SCAN
+                print("DEBUG: [WARNING] Target model invalid. Searching all mounted disks...", flush=True)
+                found = find_any_flux_brain()
+                if found:
+                    print(f"DEBUG: [RESOLVED] Found Flux Brain at -> {found}", flush=True)
+                    config['pretrained_model_name_or_path'] = found
                 else:
-                    # Last resort fallback if still nothing found
                     config['pretrained_model_name_or_path'] = "/app/flux/unet.safetensors"
 
-            # Simple Component Fallback
-            def get_comp(name, fallback):
-                for r in ["/cache", "/app/flux"]:
+            # Auto-Discovery for components
+            def scan_comp(name):
+                for r in ["/cache", "/app", "/workspace"]:
                     if not os.path.exists(r): continue
-                    for root, dirs, files in os.walk(r):
+                    for root, ds, files in os.walk(r):
+                        if "output" in root.lower(): continue
                         for f in files:
-                            if name in f.lower() and f.endswith(".safetensors"):
+                            sz = os.path.getsize(os.path.join(root, f))
+                            if name in f.lower() and f.endswith(".safetensors") and 200*1024**2 < sz < 15*1024**3:
                                 return os.path.join(root, f)
-                return fallback
+                return None
 
-            config.setdefault('ae', get_comp("ae", "/app/flux/ae.safetensors"))
-            config.setdefault('clip_l', get_comp("clip_l", "/app/flux/clip_l.safetensors"))
-            config.setdefault('t5xxl', get_comp("t5xxl", "/app/flux/t5xxl_fp16.safetensors"))
+            config['ae'] = scan_comp("ae") or "/app/flux/ae.safetensors"
+            config['clip_l'] = scan_comp("clip_l") or "/app/flux/clip_l.safetensors"
+            config['t5xxl'] = scan_comp("t5xxl") or "/app/flux/t5xxl_fp16.safetensors"
 
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)

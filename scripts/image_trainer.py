@@ -637,52 +637,51 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
             import shutil
             
             def find_global_tokenizers():
-                # Cari folder yang punya vocab.json atau tokenizer_config.json
+                # [EXTREME SEARCH] Cari file kunci di mana pun di /cache
+                targets = {
+                    "clip_l": "vocab.json",
+                    "clip_g": "tokenizer_config.json",
+                    "t5": "special_tokens_map.json"
+                }
+                results = {}
                 for r in ["/cache", "/app", "/workspace"]:
                     if not os.path.exists(r): continue
-                    for root, dirs, _ in os.walk(r):
-                        # Hindari folder output biar gak dapet tokenizer rusak
-                        if any(x in root.lower() for x in ["output", "checkpoint", "sample"]): continue
+                    for root, dirs, files in os.walk(r):
+                        if any(x in root.lower() for x in ["output", "checkpoint", "sample", "dataset"]): continue
                         
-                        # Target 1: CLIP L (openai)
-                        if "tokenizer" in root.lower() and os.path.exists(os.path.join(root, "vocab.json")):
-                            yield "clip_l", root
-                        # Target 2: OpenCLIP G (laion)
-                        if "tokenizer_2" in root.lower() and os.path.exists(os.path.join(root, "tokenizer_config.json")):
-                            yield "clip_g", root
-                return
+                        for key, filename in targets.items():
+                            if key in results: continue
+                            if filename in files:
+                                # Verifikasi ini beneran tokenizer (bukan file nyasar)
+                                if key == "clip_l" and "clip" in root.lower():
+                                    results[key] = root
+                                elif key == "clip_g" and "clip" in root.lower() and "tokenizer_2" in root.lower():
+                                    results[key] = root
+                                elif key == "t5" and "t5" in root.lower():
+                                    results[key] = root
+                return results
 
-            print(f"DEBUG: Ninja Tokenizer Search started for {model_type}...", flush=True)
-            
-            # Map of ID to destination
-            targets = {
+            print(f"DEBUG: Extreme Ninja Tokenizer Search started...", flush=True)
+            staging_map = {
                 "clip_l": "openai/clip-vit-large-patch14",
-                "clip_g": "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k"
+                "clip_g": "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k",
+                "t5": "google/t5-v1_1-xxl"
             }
 
-            # 1. Try local model folder first
-            target_model_dir = model_path if os.path.isdir(model_path) else os.path.dirname(model_path)
-            local_found = False
-            for key, folder in [("clip_l", "tokenizer"), ("clip_g", "tokenizer_2")]:
-                src = os.path.join(target_model_dir, folder)
-                if os.path.exists(src):
-                    dest = targets[key]
-                    print(f"DEBUG: Found local {key} at {src} -> Staging to {dest}", flush=True)
-                    if os.path.exists(os.path.dirname(dest)): shutil.rmtree(os.path.dirname(dest), ignore_errors=True)
-                    os.makedirs(os.path.dirname(dest), exist_ok=True)
-                    if os.path.exists(dest): shutil.rmtree(dest)
+            found_tokenizers = find_global_tokenizers()
+            for key, src in found_tokenizers.items():
+                dest = staging_map[key]
+                print(f"DEBUG: [NINJA] Found {key} at {src} -> Staging to {dest}", flush=True)
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                if os.path.exists(dest): 
+                    if os.path.islink(dest): os.unlink(dest)
+                    else: shutil.rmtree(dest)
+                
+                # Gunakan Symlink biar kenceng
+                try:
+                    os.symlink(src, dest)
+                except:
                     shutil.copytree(src, dest)
-                    local_found = True
-
-            # 2. If flat repo (like mhnakif), do Global Search
-            if not local_found:
-                print("DEBUG: Local tokenizers missing. Scanning disk for survivors...", flush=True)
-                for key, src in find_global_tokenizers():
-                    dest = targets[key]
-                    if not os.path.exists(dest):
-                        print(f"DEBUG: [NINJA] Found global {key} at {src} -> Staging to {dest}", flush=True)
-                        os.makedirs(os.path.dirname(dest), exist_ok=True)
-                        shutil.copytree(src, dest)
 
         training_command = [
             "accelerate", "launch",
@@ -701,11 +700,10 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
         
         # FORCE OFFLINE MODE & CACHE PATHS
         env = os.environ.copy()
-        env["HF_HUB_OFFLINE"] = "1"
-        env["TRANSFORMERS_OFFLINE"] = "1"
         env["HF_HOME"] = "/cache/hf_cache"
         env["TRANSFORMERS_CACHE"] = "/cache/hf_cache"
         env["PYTHONUNBUFFERED"] = "1"
+        # Hilangkan OFFLINE flag agar transformers mau pake symlink kita sebagai 'local folder'
         
         process = subprocess.Popen(
             training_command,

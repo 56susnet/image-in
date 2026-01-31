@@ -10,12 +10,9 @@ HUGGINGFACE_USERNAME=""
 HUGGINGFACE_TOKEN=""
 LOCAL_FOLDER="/app/checkpoints/$TASK_ID/$EXPECTED_REPO_NAME"
 
-CHECKPOINTS_DIR="$(pwd)/secure_checkpoints"
-OUTPUTS_DIR="$(pwd)/outputs"
-mkdir -p "$CHECKPOINTS_DIR"
-chmod 700 "$CHECKPOINTS_DIR"
-mkdir -p "$OUTPUTS_DIR"
-chmod 700 "$OUTPUTS_DIR"
+CHECKPOINTS_DIR="$(pwd)/secure_checkpoints"; OUTPUTS_DIR="$(pwd)/outputs"
+mkdir -p "$CHECKPOINTS_DIR"; chmod 700 "$CHECKPOINTS_DIR"
+mkdir -p "$OUTPUTS_DIR"; chmod 700 "$OUTPUTS_DIR"
 
 mkdir -p "$CHECKPOINTS_DIR/tmp" "$CHECKPOINTS_DIR/hf_cache" "$CHECKPOINTS_DIR/models" "$CHECKPOINTS_DIR/datasets" "$CHECKPOINTS_DIR/images" "$CHECKPOINTS_DIR/configs"
 

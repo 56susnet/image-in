@@ -597,7 +597,8 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
             "--num_machines", "1",
             "--num_cpu_threads_per_process", "2",
             f"/app/sd-script/{model_type}_train_network.py",
-            "--config_file", config_path
+            "--config_file", config_path,
+            "--tokenizer_cache_dir", "/cache/hf_cache"
         ]
 
     try:

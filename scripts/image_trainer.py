@@ -486,29 +486,51 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         # TENTUKAN ALAMAT MODEL (BIAR KOHYA GAK NYASAR)
         if model_type == "flux":
             # Cek apakah ada model pre-installed di /app/flux (Validator Mode)
-            if os.path.exists("/app/flux/unet"):
+            # Pastikan directory tersebut berisi file, bukan cuma folder kosong/poisoned
+            def is_valid_flux_resource(p):
+                if not os.path.exists(p): return False
+                if os.path.isfile(p): return p.endswith(".safetensors")
+                # If directory, check if it has any safetensors anywhere
+                for root, _, files in os.walk(p):
+                    if any(f.endswith(".safetensors") for f in files): return True
+                return False
+
+            if is_valid_flux_resource("/app/flux/unet"):
+                print("[FLUX-ADAPT] Using working pre-installed /app/flux path", flush=True)
                 config["pretrained_model_name_or_path"] = "/app/flux/unet"
                 config["ae"] = "/app/flux/ae.safetensors"
                 config["clip_l"] = "/app/flux/clip_l.safetensors"
                 config["t5xxl"] = "/app/flux/t5xxl_fp16.safetensors"
             else:
                 # Offline/Standalone Mode: Gunakan model_path hasil download
-                print(f"[FLUX-ADAPT] Pre-installed /app/flux not found. Using downloaded model at {model_path}", flush=True)
+                print(f"[FLUX-ADAPT] /app/flux not found or poisoned. Using downloaded model at {model_path}", flush=True)
+                
+                # Check structure: Is it a directory (Diffusers) or a single file?
+                model_dir = model_path if os.path.isdir(model_path) else os.path.dirname(model_path)
+                
+                # Kohya Flux Trainer prefers a single path if it's sharded diffusers
                 config["pretrained_model_name_or_path"] = model_path
                 
                 # Cek komponen di dalam folder download (Cari ae, clip, t5 secara cerdas)
-                model_dir = os.path.dirname(model_path) if model_path.endswith(".safetensors") else model_path
-                
-                def find_file_recursive(dir_path, pattern):
-                    for root, _, files in os.walk(dir_path):
+                def find_flux_component(name_pattern, preferred_subdir):
+                    # Priority 1: Preferred subdir (Diffusers style)
+                    preferred_path = os.path.join(model_dir, preferred_subdir)
+                    if os.path.exists(preferred_path):
+                        for root, _, files in os.walk(preferred_path):
+                            for f in files:
+                                if f.endswith(".safetensors"): return os.path.join(root, f)
+                    
+                    # Priority 2: Anywhere in model_dir
+                    for root, _, files in os.walk(model_dir):
+                        if preferred_subdir in root: continue # Already checked
                         for f in files:
-                            if pattern.lower() in f.lower():
+                            if name_pattern.lower() in f.lower() and f.endswith(".safetensors"):
                                 return os.path.join(root, f)
                     return None
 
-                flux_ae = find_file_recursive(model_dir, "ae.safetensors")
-                flux_clip = find_file_recursive(model_dir, "clip_l.safetensors")
-                flux_t5 = find_file_recursive(model_dir, "t5xxl")
+                flux_ae = find_flux_component("ae", "vae")
+                flux_clip = find_flux_component("clip_l", "text_encoder")
+                flux_t5 = find_flux_component("t5xxl", "text_encoder_2")
 
                 if flux_ae: config["ae"] = flux_ae
                 if flux_clip: config["clip_l"] = flux_clip

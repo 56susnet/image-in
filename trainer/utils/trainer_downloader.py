@@ -88,16 +88,54 @@ def download_from_huggingface(repo_id: str, filename: str, local_dir: str) -> st
 async def download_base_model(repo_id: str, save_root: str, model_type: ImageModelType) -> str:
     model_name = repo_id.replace("/", "--")
     save_path = os.path.join(save_root, model_name)
+    
+    # Bug Fix: If directory exists, find the model file inside it
     if os.path.exists(save_path):
-        print(f"Model {repo_id} already exists at {save_path}. Skipping download.")
+        print(f"Model {repo_id} already exists at {save_path}. Checking for model file...", flush=True)
+        
+        # Flux-specific check: Must have VAE and Text Encoders if it's a directory
+        if model_type == ImageModelType.FLUX.value:
+            has_vae = any("vae" in root.lower() for root, _, files in os.walk(save_path) if any(f.endswith(".safetensors") for f in files))
+            if not has_vae:
+                print(f"Flux model directory {save_path} is missing VAE components. Forcing re-download...", flush=True)
+                shutil.rmtree(save_path)
+            else:
+                print(f"Flux model directory {save_path} looks complete.", flush=True)
+                return save_path
+
+        if os.path.exists(save_path): # Still exists after Flux check
+            # Search for largest safetensors file
+            biggest_file = None
+            biggest_size = 0
+            for root, _, files in os.walk(save_path):
+                for f in files:
+                    if f.endswith(".safetensors"):
+                        full_p = os.path.join(root, f)
+                        sz = os.path.getsize(full_p)
+                        if sz > biggest_size:
+                            biggest_size = sz
+                            biggest_file = full_p
+            if biggest_file:
+                print(f"Found existing model file: {biggest_file}", flush=True)
+                return biggest_file
+            
+            # Fallback if directory is empty
+            print(f"Directory {save_path} exists but is empty. Re-downloading...", flush=True)
+            shutil.rmtree(save_path)
+
+    # FLUX Mode: Always snapshot download to get AE, CLIP, and T5 components
+    if model_type == ImageModelType.FLUX.value:
+        print(f"Flux detected. Downloading full repository: {repo_id}", flush=True)
+        snapshot_download(repo_id=repo_id, repo_type="model", local_dir=save_path, local_dir_use_symlinks=False)
         return save_path
+    
+    # SDXL/Other Mode: Selective or snapshot
+    has_safetensors, safetensors_path = is_safetensors_available(repo_id)
+    if has_safetensors and safetensors_path and model_type == ImageModelType.SDXL.value:
+        return download_from_huggingface(repo_id, safetensors_path, save_path)
     else:
-        has_safetensors, safetensors_path = is_safetensors_available(repo_id)
-        if has_safetensors and safetensors_path and model_type in [ImageModelType.FLUX, ImageModelType.SDXL]:
-            return download_from_huggingface(repo_id, safetensors_path, save_path)
-        else:
-            snapshot_download(repo_id=repo_id, repo_type="model", local_dir=save_path, local_dir_use_symlinks=False)
-            return save_path
+        snapshot_download(repo_id=repo_id, repo_type="model", local_dir=save_path, local_dir_use_symlinks=False)
+        return save_path
 
 
 async def download_axolotl_base_model(repo_id: str, save_dir: str) -> str:

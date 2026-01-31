@@ -632,40 +632,43 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
-        # [NINJA TOKENIZER RESCUE - V6] - BUMI HANGUS MODE
+        # [NINJA TOKENIZER RESCUE - V7] - DEATH BLOW MODE
         if model_type in ["sdxl", "flux"]:
             import shutil
             
-            def ninja_find(filename):
+            def death_blow_find(filename):
                 try:
-                    # Cari pake shell find, jauh lebih nembus dibanding python walk
-                    cmd = f"find /cache /app /workspace -name {filename} 2>/dev/null | head -n 1"
+                    # CARI DI SELURUH DISK (/) - GAK PAKE AMPUN
+                    cmd = f"find / -name {filename} 2>/dev/null | grep -i 'huggingface' | head -n 1"
                     res = subprocess.check_output(cmd, shell=True, text=True).strip()
                     if res: return os.path.dirname(res)
                 except: pass
                 return None
 
-            print(f"DEBUG: Ninja V6 (Bumi Hangus) Search started...", flush=True)
+            print(f"DEBUG: Ninja V7 (Death Blow) Total Disk Search started...", flush=True)
             
-            # Cari satu-satu pake find
-            tok_l = ninja_find("vocab.json") # CLIP L
-            tok_g = ninja_find("tokenizer_config.json") # CLIP G / T5
+            # Cari lokasi asli harta karun
+            tok_l = death_blow_find("vocab.json")
+            tok_g = death_blow_find("tokenizer_config.json")
             
-            if tok_l:
-                dest = "/app/openai/clip-vit-large-patch14"
-                print(f"DEBUG: [V6] Found CLIP L at {tok_l} -> Link to {dest}", flush=True)
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                if os.path.exists(dest): shutil.rmtree(dest, ignore_errors=True)
-                try: os.symlink(tok_l, dest)
-                except: shutil.copytree(tok_l, dest, dirs_exist_ok=True)
-            
-            if tok_g:
-                dest = "/app/laion/CLIP-ViT-bigG-14-laion2B-39B-b160k"
-                print(f"DEBUG: [V6] Found CLIP G at {tok_g} -> Link to {dest}", flush=True)
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                if os.path.exists(dest): shutil.rmtree(dest, ignore_errors=True)
-                try: os.symlink(tok_g, dest)
-                except: shutil.copytree(tok_g, dest, dirs_exist_ok=True)
+            # Paksa mapping ke folder yang library transformers suka
+            mappings = {
+                tok_l: ["openai/clip-vit-large-patch14", "tokenizer"],
+                tok_g: ["laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", "google/t5-v1_1-xxl", "tokenizer_2"]
+            }
+
+            for src, dest_list in mappings.items():
+                if not src: continue
+                for d_path in dest_list:
+                    for base in ["/app", "/workspace", "."]:
+                        dest = os.path.join(base, d_path)
+                        print(f"DEBUG: [V7] Staging {src} -> {dest}", flush=True)
+                        os.makedirs(os.path.dirname(dest), exist_ok=True)
+                        if os.path.exists(dest):
+                            if os.path.islink(dest): os.unlink(dest)
+                            else: shutil.rmtree(dest, ignore_errors=True)
+                        try: os.symlink(src, dest)
+                        except: shutil.copytree(src, dest, dirs_exist_ok=True)
 
         training_command = [
             "accelerate", "launch",
@@ -677,8 +680,9 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
             "--num_cpu_threads_per_process", "2",
             f"/app/sd-script/{model_type}_train_network.py",
             "--config_file", config_path,
-            "--tokenizer_cache_dir", "/app" # FORCE SEARCH DI /app
+            "--tokenizer_cache_dir", "/app" # FORCE
         ]
+
 
 
     try:

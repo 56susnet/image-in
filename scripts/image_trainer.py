@@ -512,14 +512,15 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                 
                 # Cek komponen di dalam folder download (Cari ae, clip, t5 secara cerdas)
                 def find_flux_component(name_pattern, preferred_subdir):
-                    # Priority 1: Preferred subdir (Diffusers style)
+                    # Priority 1: Preferred subdir (Diffusers style) - KEMBALIKAN PATH FOLDER (BUKAN FILE) AGAR SUPORT SHARDING
                     pref = os.path.join(model_dir, preferred_subdir)
                     if os.path.isdir(pref):
+                        # Pastikan folder tersebut berisi safetensors (biar gak zonk)
                         for r, _, fs in os.walk(pref):
-                            for f in fs:
-                                if f.endswith(".safetensors"): return os.path.join(r, f)
+                            if any(f.endswith(".safetensors") for f in fs):
+                                return pref # Balikin folder-nya saja
                     
-                    # Priority 2: Direct match in model_dir
+                    # Priority 2: Direct file match in model_dir (Jika bukan struktur Diffusers)
                     for r, _, fs in os.walk(model_dir):
                         if preferred_subdir and preferred_subdir in r: continue
                         for f in fs:

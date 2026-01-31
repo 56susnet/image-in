@@ -175,6 +175,17 @@ async def main():
                 adapters_dir=adapters_dir
             )
             print(f"Qwen-Image adapter downloaded to: {qwen_adapter_path}", flush=True)
+        
+        print("Downloading clip models", flush=True)
+        CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14", cache_dir=cst.HUGGINGFACE_CACHE_PATH)
+        CLIPTokenizer.from_pretrained("laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", cache_dir=cst.HUGGINGFACE_CACHE_PATH)
+        snapshot_download(
+            repo_id="google/t5-v1_1-xxl",
+            repo_type="model",
+            cache_dir=cst.HUGGINGFACE_CACHE_PATH,
+            local_dir_use_symlinks=False,
+            allow_patterns=["tokenizer_config.json", "spiece.model", "special_tokens_map.json", "config.json"],
+        )
     else:
         dataset_path, _ = await download_text_dataset(args.task_id, args.dataset, args.file_format, dataset_dir)
         model_path = await download_axolotl_base_model(args.model, model_dir)

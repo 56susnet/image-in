@@ -607,39 +607,38 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                             del config["max_train_steps"]
                     config[key] = value
 
-        # [FINAL LOCK] FLUX ASSET ENFORCEMENT - TOURNAMENT RESILIENCE
+        # [SURGICAL FIX] FLUX ASSET ENFORCEMENT - TOURNAMENT RESILIENCE
         if model_type == "flux":
             print(f"DEBUG: Flux Asset Discovery for {model_path}...", flush=True)
             
             def get_best_flux_base(path):
-                # 1. Check for standard Diffusers structure
-                if os.path.isdir(os.path.join(path, "transformer")):
-                    return path
-                # 2. Check for single large weights in the folder (mhnakif style)
+                # 1. Jika folder standar Diffusers (punya subfolder transformer)
+                if os.path.isdir(os.path.join(path, "transformer")): return path
+                # 2. Jika folder berisi satu file safetensors besar (mhnakif / GGUF / Single file)
                 if os.path.isdir(path):
                     files = [f for f in os.listdir(path) if f.endswith(".safetensors")]
-                    for f in files:
-                        if os.path.getsize(os.path.join(path, f)) > 5 * 1024**3:
-                            return os.path.join(path, f)
-                # 3. Last resort: Return the path as-is and let the trainer handle it
+                    if files:
+                        biggest = max(files, key=lambda x: os.path.getsize(os.path.join(path, x)))
+                        if os.path.getsize(os.path.join(path, biggest)) > 5 * 1024**3:
+                            return os.path.join(path, biggest)
+                # 3. Last resort: Gunakan path apa adanya
                 return path
 
             config['pretrained_model_name_or_path'] = get_best_flux_base(model_path)
             
-            # Simple Component Discovery (AE, CLIP, T5)
-            def find_flux_component(name, default_path):
-                # Scan local folders and common mounts
+            # Simple Component Discovery (AE, CLIP, T5) - Non-Blocking
+            def find_flux_comp(name, default):
                 for r in [model_path, "/cache", "/app/flux"]:
                     if not os.path.exists(r): continue
                     for root, _, files in os.walk(r):
                         for f in files:
                             if name in f.lower() and f.endswith(".safetensors"):
                                 return os.path.join(root, f)
-                return default_path
+                return default
 
-            config['ae'] = find_flux_component("ae", "/app/flux/ae.safetensors")
-            config['clip_l'] = find_flux_component("clip_l", "/app/flux/clip_l.safetensors")
-            config['t5xxl'] = find_flux_component("t5xxl", "/app/flux/t5xxl_fp16.safetensors")
+            config['ae'] = find_flux_comp("ae", "/app/flux/ae.safetensors")
+            config['clip_l'] = find_flux_comp("clip_l", "/app/flux/clip_l.safetensors")
+            config['t5xxl'] = find_flux_comp("t5xxl", "/app/flux/t5xxl_fp16.safetensors")
 
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)

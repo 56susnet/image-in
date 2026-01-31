@@ -607,51 +607,39 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                             del config["max_train_steps"]
                     config[key] = value
 
-        # [FINAL LOCK] FLUX ASSET ENFORCEMENT - EXTREME RESILIENCE
+        # [FINAL LOCK] FLUX ASSET ENFORCEMENT - TOURNAMENT RESILIENCE
         if model_type == "flux":
-            print(f"DEBUG: Flux Extreme Recovery for {model_path}...", flush=True)
+            print(f"DEBUG: Flux Asset Discovery for {model_path}...", flush=True)
             
-            def find_any_flux_brain():
-                print("DEBUG: Deep Disk Scan for ANY Flux transformer...", flush=True)
-                for root_dir in ["/cache", "/app", "/workspace"]:
-                    if not os.path.exists(root_dir): continue
-                    for root, dirs, files in os.walk(root_dir):
-                        if "checkpoints" in root.lower() or "output" in root.lower(): continue
-                        for f in files:
-                            if f.endswith(".safetensors") and os.path.getsize(os.path.join(root, f)) > 10 * 1024**3:
-                                return os.path.join(root, f)
-                return None
+            def get_best_flux_base(path):
+                # 1. Check for standard Diffusers structure
+                if os.path.isdir(os.path.join(path, "transformer")):
+                    return path
+                # 2. Check for single large weights in the folder (mhnakif style)
+                if os.path.isdir(path):
+                    files = [f for f in os.listdir(path) if f.endswith(".safetensors")]
+                    for f in files:
+                        if os.path.getsize(os.path.join(path, f)) > 5 * 1024**3:
+                            return os.path.join(path, f)
+                # 3. Last resort: Return the path as-is and let the trainer handle it
+                return path
 
-            # 1. Cek apakah model asli valid
-            if os.path.isdir(os.path.join(model_path, "transformer")):
-                config['pretrained_model_name_or_path'] = model_path
-            elif os.path.exists(os.path.join(model_path, "diffusion_pytorch_model.safetensors")):
-                 config['pretrained_model_name_or_path'] = os.path.join(model_path, "diffusion_pytorch_model.safetensors")
-            else:
-                # 2. EMERGENCY SCAN
-                print("DEBUG: [WARNING] Target model invalid. Searching all mounted disks...", flush=True)
-                found = find_any_flux_brain()
-                if found:
-                    print(f"DEBUG: [RESOLVED] Found Flux Brain at -> {found}", flush=True)
-                    config['pretrained_model_name_or_path'] = found
-                else:
-                    config['pretrained_model_name_or_path'] = "/app/flux/unet.safetensors"
-
-            # Auto-Discovery for components
-            def scan_comp(name):
-                for r in ["/cache", "/app", "/workspace"]:
+            config['pretrained_model_name_or_path'] = get_best_flux_base(model_path)
+            
+            # Simple Component Discovery (AE, CLIP, T5)
+            def find_flux_component(name, default_path):
+                # Scan local folders and common mounts
+                for r in [model_path, "/cache", "/app/flux"]:
                     if not os.path.exists(r): continue
-                    for root, ds, files in os.walk(r):
-                        if "output" in root.lower(): continue
+                    for root, _, files in os.walk(r):
                         for f in files:
-                            sz = os.path.getsize(os.path.join(root, f))
-                            if name in f.lower() and f.endswith(".safetensors") and 200*1024**2 < sz < 15*1024**3:
+                            if name in f.lower() and f.endswith(".safetensors"):
                                 return os.path.join(root, f)
-                return None
+                return default_path
 
-            config['ae'] = scan_comp("ae") or "/app/flux/ae.safetensors"
-            config['clip_l'] = scan_comp("clip_l") or "/app/flux/clip_l.safetensors"
-            config['t5xxl'] = scan_comp("t5xxl") or "/app/flux/t5xxl_fp16.safetensors"
+            config['ae'] = find_flux_component("ae", "/app/flux/ae.safetensors")
+            config['clip_l'] = find_flux_component("clip_l", "/app/flux/clip_l.safetensors")
+            config['t5xxl'] = find_flux_component("t5xxl", "/app/flux/t5xxl_fp16.safetensors")
 
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)

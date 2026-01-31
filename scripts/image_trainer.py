@@ -605,32 +605,31 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     set_flux_arg(key, path)
                     print(f"   [VALIDATOR] Found {key} at {path}", flush=True)
 
-            # 2. FALLBACK/DISCOVERY (MENCARI KE DALAM HF CACHE)
+            # 2. FALLBACK/DISCOVERY (MENCARI KE DALAM SEMUA FOLDER CACHE)
+            def search_for_flux_assets():
+                search_bases = ["/cache/models", "/cache/hf_cache", "/app/models", "/app/flux", os.path.dirname(model_path)]
+                res = {"files": [], "tokenizer_dirs": []}
+                for b_dir in search_bases:
+                    if not os.path.exists(b_dir): continue
+                    for root, dirs, files in os.walk(b_dir):
+                        # Cari file besar (Weights)
+                        for f in files:
+                            if f.endswith(".safetensors"):
+                                p = os.path.join(root, f)
+                                try:
+                                    sz = os.path.getsize(p) / (1024**3)
+                                    res["files"].append({"path": p, "size": sz, "root": root})
+                                except: continue
+                        # Cari folder Tokenizer
+                        if "tokenizer_config.json" in files:
+                            res["tokenizer_dirs"].append(root)
+                return res
+
+            assets = search_for_flux_assets()
+            files_found = assets["files"]
+            
             missing = [k for k in ['ae', 'clip_l', 't5xxl'] if not os.path.exists(config.get(k, ""))]
             if missing:
-                def search_for_flux_files():
-                    # SEARCH BASES DISESUAIKAN DENGAN REALITA VPS BOS
-                    search_bases = [
-                        "/cache/models", 
-                        "/cache/hf_cache", # Kunci Utama
-                        "/app/models", 
-                        "/app/flux", 
-                        os.path.dirname(model_path)
-                    ]
-                    found = []
-                    for b_dir in search_bases:
-                        if not os.path.exists(b_dir): continue
-                        for root, _, files in os.walk(b_dir):
-                            for f in files:
-                                if f.endswith(".safetensors"):
-                                    p = os.path.join(root, f)
-                                    try:
-                                        sz = os.path.getsize(p) / (1024**3)
-                                        found.append({"path": p, "size": sz, "root": root})
-                                    except: continue
-                    return found
-
-                files_found = search_for_flux_files()
                 if 'ae' in missing:
                     path = find_surgical(files_found, "AE", 0.3, 0.45, must_contain="ae")
                     if path: set_flux_arg('ae', path)
@@ -640,6 +639,12 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                 if 't5xxl' in missing:
                     path = find_surgical(files_found, "T5", 4.3, 11.0, avoid=["part", "of-", "shard"])
                     if path: set_flux_arg('t5xxl', path)
+
+            # SMART TOKENIZER INJECTION (OBAT OSERROR)
+            if assets["tokenizer_dirs"]:
+                # Ambil folder pertama yang keliatan seperti tokenizer CLIP/T5
+                config['tokenizer_cache_dir'] = assets["tokenizer_dirs"][0]
+                print(f"   [VALIDATOR] Tokenizer Cache Dir: {config['tokenizer_cache_dir']}", flush=True)
 
             print(f"[ASSET SYNC] AE: {config.get('ae')}, CLIP: {config.get('clip_l')}, T5: {config.get('t5xxl')}", flush=True)
 
@@ -691,8 +696,7 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
     env = os.environ.copy()
     
-    # SINKRONISASI TOTAL DENGAN FLUX_TEST.SH & DOWNLOADER (PENTING!)
-    # Mengabaikan HUGGINGFACE_CACHE_PATH dari constants karena salah alamat (/tmp/hf_cache)
+    # SINKRONISASI TOTAL DENGAN FLUX_TEST.SH & DOWNLOADER (LOGIKA 07E71178)
     target_cache = "/cache/hf_cache" 
     env.update({
         "HF_HOME": target_cache,
@@ -705,7 +709,7 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
-        # EXACT CHAMPION COMMAND DARI COMMIT 07E71178
+        # EXACT CHAMPION COMMAND DARI COMMIT 07E71178 (THE ULTIMATE SYNC)
         training_command = [
             "accelerate", "launch",
             "--dynamo_backend", "no",

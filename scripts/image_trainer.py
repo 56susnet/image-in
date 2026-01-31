@@ -32,9 +32,11 @@ from core.models.utility_models import ImageModelType
 # CARI PATH MODEL
 def get_model_path(path: str) -> str:
     if os.path.isdir(path):
-        files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-        if len(files) == 1 and files[0].endswith(".safetensors"):
-            return os.path.join(path, files[0])
+        files = [f for f in os.listdir(path) if f.endswith(".safetensors")]
+        if files:
+            # Ambil file safetensors dengan ukuran terbesar
+            biggest_file = max(files, key=lambda x: os.path.getsize(os.path.join(path, x)))
+            return os.path.join(path, biggest_file)
     return path
 # GABUNG SETTINGAN
 def merge_model_config(default_config: dict, model_config: dict) -> dict:

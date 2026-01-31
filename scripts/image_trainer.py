@@ -607,24 +607,57 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                             del config["max_train_steps"]
                     config[key] = value
 
-        # [FINAL LOCK] FLUX ASSET ENFORCEMENT (Must happen AFTER all overrides)
+        # [FINAL LOCK] FLUX ASSET ENFORCEMENT - TOURNAMENT RESILIENCE MODE
         if model_type == "flux":
-            print(f"DEBUG: Flux Path Guard - Finalizing weights for {model_path}...", flush=True)
+            print(f"DEBUG: Flux Asset Discovery - Investigating {model_path}...", flush=True)
             
-            # Use provided model ONLY if it has a valid transformer subfolder
-            if os.path.isdir(os.path.join(model_path, "transformer")):
+            # Helper: Search for valid weights in a list of roots
+            def find_valid_flux_weights(search_roots):
+                targets = ["diffusion_pytorch_model.safetensors", "transformer.safetensors", "unet.safetensors", "flux1-dev.safetensors"]
+                for root_dir in search_roots:
+                    if not os.path.exists(root_dir): continue
+                    for root, dirs, files in os.walk(root_dir):
+                        # Avoid checkpoints folder to not train on old results
+                        if "checkpoints" in root.lower(): continue
+                        for f in files:
+                            if f in targets or (f.endswith(".safetensors") and ("flux" in f.lower() or "unet" in f.lower())):
+                                # Ensure it's big enough (>10GB) to be a real Flux transformer
+                                if os.path.getsize(os.path.join(root, f)) > 10 * 1024**3:
+                                    return os.path.join(root, f)
+                return None
+
+            # 1. Cek Model yang diberikan sistem dulu
+            transformer_path = os.path.join(model_path, "transformer")
+            if os.path.isdir(transformer_path):
+                print(f"DEBUG: [FOUND] Standard structure at {model_path}", flush=True)
                 config['pretrained_model_name_or_path'] = model_path
-                print(f"DEBUG: [LOCK] Using validated Diffusers path -> {model_path}", flush=True)
-            elif os.path.exists(os.path.join(model_path, "diffusion_pytorch_model.safetensors")):
-                 config['pretrained_model_name_or_path'] = os.path.join(model_path, "diffusion_pytorch_model.safetensors")
-                 print(f"DEBUG: [LOCK] Using direct weights path -> {config['pretrained_model_name_or_path']}", flush=True)
             else:
-                # Absolute Fallback to tournament defaults
-                print(f"DEBUG: [LOCK] Incompatible model detected. FORCING system base fallback.", flush=True)
-                config['pretrained_model_name_or_path'] = "/app/flux/unet.safetensors"
-                config['ae'] = "/app/flux/ae.safetensors"
-                config['clip_l'] = "/app/flux/clip_l.safetensors"
-                config['t5xxl'] = "/app/flux/t5xxl_fp16.safetensors"
+                # 2. Cari di seluruh disk (/cache dan /app) - Resilience Mode
+                print(f"DEBUG: Path {model_path} invalid. Searching for valid Flux base weights...", flush=True)
+                # Downloader biasanya naruh di /cache/models atau /cache/hf_cache
+                discovery_path = find_valid_flux_weights(["/cache", "/app", "/workspace"])
+                
+                if discovery_path:
+                    print(f"DEBUG: [RESILIENCE] Found alternative weights at {discovery_path}", flush=True)
+                    config['pretrained_model_name_or_path'] = discovery_path
+                else:
+                    print(f"ERROR: No valid Flux weights found! Downloader might have failed or model is incompatible.", flush=True)
+                    raise FileNotFoundError("Could not find valid Flux weights for training.")
+
+            # Component Discovery (T5, CLIP, VAE) - Same Logic
+            # Jika downloader sukses, file-file ini pasti ada di /cache
+            def find_component(name, fallback):
+                for r in ["/cache", "/app", "/workspace"]:
+                    if not os.path.exists(r): continue
+                    for root, dirs, files in os.walk(r):
+                        for f in files:
+                            if name in f.lower() and f.endswith(".safetensors"):
+                                return os.path.join(root, f)
+                return fallback
+
+            if not config.get('ae'): config['ae'] = find_component("ae", "/app/flux/ae.safetensors")
+            if not config.get('clip_l'): config['clip_l'] = find_component("clip_l", "/app/flux/clip_l.safetensors")
+            if not config.get('t5xxl'): config['t5xxl'] = find_component("t5xxl", "/app/flux/t5xxl_fp16.safetensors")
 
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)

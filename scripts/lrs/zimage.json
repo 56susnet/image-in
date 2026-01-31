@@ -2,7 +2,7 @@
     "default": {},
     "data": {
         "zimage_turbo": {
-            "model_name": "Z-Image-Turbo-V2",
+            "model_name": "gradients-io-tournaments/Z-Image-Turbo",
             "small": {
                 "lr": 1.5e-4,
                 "alpha": 32,

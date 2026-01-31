@@ -521,65 +521,8 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
 
         config['pretrained_model_name_or_path'] = model_path
         
-        # CARI ASSET FLUX (FLUX GOD MODE UNTUK CARI T5, CLIP, VAE).
-        if model_type == "flux":
-            print("\n[FLUX GOD MODE] Starting precision asset fingerprinting...", flush=True)
-            
-            # HARD-PRIORITY
-            std_paths = {
-                'ae': "/cache/models/ae.safetensors",
-                'clip_l': "/cache/models/clip_l.safetensors",
-                't5xxl': "/cache/models/t5xxl.safetensors"
-            }
-            
-            def set_flux_arg(k, v):
-                config[k] = v
-                if 'model_arguments' not in config: config['model_arguments'] = {}
-                config['model_arguments'][k] = v
+        # FLUX Asset Discovery Logic Removed - Relying on TOML defaults
 
-            for key, path in std_paths.items():
-                if os.path.exists(path):
-                    set_flux_arg(key, path)
-                    print(f"   [VALIDATOR] Found {key} at {path}", flush=True)
-
-            # FALLBACK/DISCOVERY
-            missing = [k for k in ['ae', 'clip_l', 't5xxl'] if not os.path.exists(config.get(k, ""))]
-            if missing:
-                def search_for_flux_files():
-                    search_bases = ["/cache/models", "/app/models", "/app/flux", "/workspace/models", os.path.dirname(model_path)]
-                    found = []
-                    for b_dir in search_bases:
-                        if not os.path.exists(b_dir): continue
-                        for root, _, files in os.walk(b_dir):
-                            for f in files:
-                                if f.endswith(".safetensors"):
-                                    p = os.path.join(root, f)
-                                    sz = os.path.getsize(p) / (1024**3)
-                                    found.append({"path": p, "size": sz, "root": root})
-                    return found
-
-                files_found = search_for_flux_files()
-
-                if 'ae' in missing:
-                    path = find_surgical(files_found, "AE", 0.3, 0.45, must_contain="ae")
-                    if path: set_flux_arg('ae', path)
-                if 'clip_l' in missing:
-                    path = find_surgical(files_found, "CLIP", 0.2, 0.45) or "/app/models/clip_l.safetensors"
-                    if path: set_flux_arg('clip_l', path)
-                if 't5xxl' in missing:
-                    path = find_surgical(files_found, "T5", 4.3, 11.0, avoid=["part", "of-", "shard"])
-                    if path: set_flux_arg('t5xxl', path)
-
-            # CRITICAL COHERENCE
-            final_ae = config.get('ae')
-            final_clip = config.get('clip_l')
-            final_t5 = config.get('t5xxl')
-
-            if not (final_ae and final_clip and final_t5 and os.path.exists(final_clip)):
-                print("[GOD MODE FAILURE] Missing vital FLUX components!", flush=True)
-                print(f"   Current Resolution: AE={final_ae}, CLIP={final_clip}, T5={final_t5}", flush=True)
-
-            print(f"[ASSET SYNC] AE: {final_ae}, CLIP: {final_clip}, T5: {final_t5}", flush=True)
 
         config['train_data_dir'] = train_data_dir
         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)
@@ -588,12 +531,8 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         # SIMPAN & SUNTIK DATA FINAL (PENYIMPANAN RESEP KE /TMP/)
         section_map = {}
         
-        # FLUX SPECIFIC DIRECT OVERRIDES (FUNCTION)
-        if model_type == "flux":
-            section_map["unet_lr"] = (None, "unet_lr")
-            section_map["text_encoder_lr"] = (None, "text_encoder_lr")
-            section_map["optimizer_type"] = (None, "optimizer_type")
-            section_map["optimizer_args"] = (None, "optimizer_args")
+        # FLUX Section Map Removed
+
 
         # APPLY OVERRIDES (FUNCTION)
         configs_to_apply = []

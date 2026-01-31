@@ -573,7 +573,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         return config_path, output_dir
 
 # PHASE 4 - MENYALAKAN MESIN DAN MENGAWASI JALANNYA TRAINING
-def run_training(model_type, config_path, output_dir, hours_to_complete=None, script_start_time=None):
+def run_training(model_type, config_path, output_dir, hours_to_complete=None, script_start_time=None, model_path=None):
     print(f"Starting training with config: {config_path}", flush=True)
     
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
@@ -588,6 +588,27 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
+        # MAGIC FIX: STAGE TOKENIZER LOKAL UNTUK SDXL (BYPASS HF HUB)
+        if model_type == "sdxl" and model_path and os.path.isdir(model_path):
+            import shutil
+            print(f"DEBUG: Checking for local tokenizer in {model_path}...", flush=True)
+            
+            # Tokenizer 1 (CLIP L) -> openai/clip-vit-large-patch14
+            tok1_src = os.path.join(model_path, "tokenizer")
+            tok1_dest = "openai/clip-vit-large-patch14"
+            if os.path.exists(tok1_src):
+                print(f"DEBUG: Staging tokenizer 1 to {tok1_dest}", flush=True)
+                if os.path.exists(tok1_dest): shutil.rmtree(tok1_dest)
+                shutil.copytree(tok1_src, tok1_dest)
+                
+            # Tokenizer 2 (OpenCLIP G) -> laion/CLIP-ViT-bigG-14-laion2B-39B-b160k
+            tok2_src = os.path.join(model_path, "tokenizer_2")
+            tok2_dest = "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k"
+            if os.path.exists(tok2_src):
+                print(f"DEBUG: Staging tokenizer 2 to {tok2_dest}", flush=True)
+                if os.path.exists(tok2_dest): shutil.rmtree(tok2_dest)
+                shutil.copytree(tok2_src, tok2_dest)
+
         training_command = [
             "accelerate", "launch",
             "--dynamo_backend", "no",
@@ -597,12 +618,18 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
             "--num_machines", "1",
             "--num_cpu_threads_per_process", "2",
             f"/app/sd-script/{model_type}_train_network.py",
-            "--config_file", config_path,
-            "--tokenizer_cache_dir", "/cache/hf_cache"
+            "--config_file", config_path
         ]
 
     try:
         print(f"Launching {model_type.upper()} training with command: {' '.join(training_command)}", flush=True)
+        
+        # FORCE OFFLINE MODE & CACHE PATHS
+        env = os.environ.copy()
+        env["HF_HUB_OFFLINE"] = "1"
+        env["TRANSFORMERS_OFFLINE"] = "1"
+        env["HF_HOME"] = "/cache/hf_cache" # Ensure this matches the volume mount
+        
         process = subprocess.Popen(
             training_command,
             stdout=subprocess.PIPE,
@@ -744,7 +771,7 @@ async def main():
     if shutil.which("docker"):
         subprocess.run(["docker", "rm", "-f", "image-trainer-example"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
-    run_training(args.model_type, config_path, output_dir, args.hours_to_complete, script_start_time)
+    run_training(args.model_type, config_path, output_dir, args.hours_to_complete, script_start_time, model_path=model_path)
 
 # PHASE 7 - FINAL CHECK DAN UPLOAD HASIL KE HUGGINGFACE
     # CEK TOKEN DAN USERNAME HUGGING FACE

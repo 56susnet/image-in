@@ -530,19 +530,76 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
 
         config['pretrained_model_name_or_path'] = model_path
         
-        # FLUX Asset Discovery Logic Removed - Relying on TOML defaults
+        # [RESTORATION] FLUX Asset Discovery Logic
+        if model_type == "flux":
+            print(f"DEBUG: Performing FLUX asset discovery in {model_path}...", flush=True)
+            
+            # Find Unet/Transformer - Check for specific shards or directory
+            transformer_path = os.path.join(model_path, "transformer")
+            if os.path.isdir(transformer_path):
+                # Kohya's flux_train_network.py works best if we point to the parent if shards exist,
+                # but sometimes it needs the folder. We'll set it to the folder.
+                config['pretrained_model_name_or_path'] = transformer_path
+            elif model_path.endswith(".safetensors"):
+                config['pretrained_model_name_or_path'] = model_path
+            
+            # Find T5 XXL - Crucial for offline
+            t5_paths = [
+                os.path.join(model_path, "t5xxl"),
+                os.path.join(os.path.dirname(model_path), "google--t5-v1_1-xxl"),
+                "/cache/models/google--t5-v1_1-xxl",
+                "/cache/hf_cache/google--t5-v1_1-xxl"
+            ]
+            for p in t5_paths:
+                if os.path.exists(p):
+                    config['t5xxl'] = p
+                    print(f"DEBUG: Found T5XXL at {p}", flush=True)
+                    break
+            
+            # Find CLIP L
+            clip_paths = [
+                os.path.join(model_path, "clip_l"),
+                os.path.join(os.path.dirname(model_path), "openai--clip-vit-large-patch14"),
+                "/cache/models/openai--clip-vit-large-patch14",
+                "/cache/hf_cache/openai--clip-vit-large-patch14"
+            ]
+            for p in clip_paths:
+                if os.path.exists(p):
+                    config['clip_l'] = p
+                    print(f"DEBUG: Found CLIP_L at {p}", flush=True)
+                    break
 
+            # Find VAE / AE
+            ae_paths = [
+                os.path.join(model_path, "ae"),
+                os.path.join(model_path, "vae"),
+                os.path.join(os.path.dirname(model_path), "ae")
+            ]
+            for p in ae_paths:
+                if os.path.exists(p):
+                    config['ae'] = p
+                    print(f"DEBUG: Found AE (VAE) at {p}", flush=True)
+                    break
 
         config['train_data_dir'] = train_data_dir
         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)
         config['output_dir'] = output_dir
 
         # SIMPAN & SUNTIK DATA FINAL (PENYIMPANAN RESEP KE /TMP/)
-        section_map = {}
+        section_map = {
+             "optimizer_type": (None, "optimizer_type"),
+             "optimizer_args": (None, "optimizer_args"),
+             "unet_lr": (None, "unet_lr"),
+             "network_dim": (None, "network_dim"),
+             "network_alpha": (None, "network_alpha"),
+             "t5xxl": (None, "t5xxl"),
+             "clip_l": (None, "clip_l"),
+             "ae": (None, "ae"),
+             "noise_offset": (None, "noise_offset"),
+             "multires_noise_iterations": (None, "multires_noise_iterations"),
+             "multires_noise_discount": (None, "multires_noise_discount")
+        }
         
-        # FLUX Section Map Removed
-
-
         # APPLY OVERRIDES (FUNCTION)
         configs_to_apply = []
         if size_config:
@@ -562,6 +619,12 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                 else:
                     # DIRECT INJECTION FOR ROOT KEYS (MAX_TRAIN_EPOCHS, TRAIN_BATCH_SIZE, ETC.)
                     if key == "max_train_epochs":
+                        # CRITICAL: If max_train_steps is already defined (likely from flux.json), do NOT override with epochs!
+                        if "max_train_steps" in config or (lrs_settings and "max_train_steps" in lrs_settings):
+                            if "max_train_epochs" in config:
+                                del config["max_train_epochs"]
+                            print(f"   [SUPPRESS] Deleting max_train_epochs to prioritize Champion Steps", flush=True)
+                            continue 
                         print(f"   [OVERRIDE] Setting {key} = {value} from {name}", flush=True)
                         if "max_train_steps" in config:
                             del config["max_train_steps"]

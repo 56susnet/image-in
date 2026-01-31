@@ -529,41 +529,35 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
             config = toml.load(file)
         # [RESTORATION] FLUX Asset Discovery Logic
         if model_type == "flux":
-            print(f"DEBUG: Flux Guardian - Validating weights in {model_path}...", flush=True)
+            print(f"DEBUG: Flux Guardian - Verifying model compatibility in {model_path}...", flush=True)
             
-            # Step 1: Scan for valid weights
-            valid_weights = False
-            for root, dirs, files in os.walk(model_path):
-                if any(f.endswith((".safetensors", ".index.json")) for f in files):
-                    valid_weights = True
+            # Check for standard Diffusers structure
+            transformer_path = os.path.join(model_path, "transformer")
+            is_valid_diffusers = os.path.isdir(transformer_path)
+            
+            # Check for direct safetensors weights
+            direct_weight = None
+            for f in ["diffusion_pytorch_model.safetensors", "transformer.safetensors"]:
+                p = os.path.join(model_path, f)
+                if os.path.exists(p):
+                    direct_weight = p
                     break
-            
-            if not valid_weights:
-                print(f"DEBUG: [WARNING] No valid training weights found in {model_path}. FALLBACK to TOML defaults.", flush=True)
-                # We do NOT overwrite pretrained_model_name_or_path, keeping the default from TOML
-            else:
-                # ONLY if valid weights exist, do we try to point specifically to them
+
+            if is_valid_diffusers:
+                print(f"DEBUG: Valid Diffusers structure found at {model_path}", flush=True)
                 config['pretrained_model_name_or_path'] = model_path
-                all_paths = []
-                for root, dirs, files in os.walk(model_path):
-                    for f in files: all_paths.append(os.path.join(root, f))
+            elif direct_weight:
+                print(f"DEBUG: Direct weights found at {direct_weight}", flush=True)
+                config['pretrained_model_name_or_path'] = direct_weight
+            else:
+                # Compatibility Fallback: The provided model is likely GGUF or incomplete
+                print(f"DEBUG: [NOTICE] Provided model format is incompatible. Using system base model: /app/flux/unet.safetensors", flush=True)
+                config['pretrained_model_name_or_path'] = "/app/flux/unet.safetensors"
+                config['ae'] = "/app/flux/ae.safetensors"
+                config['clip_l'] = "/app/flux/clip_l.safetensors"
+                config['t5xxl'] = "/app/flux/t5xxl_fp16.safetensors"
 
-                # Find Transformer Specifics
-                for pattern in [".index.json", "transformer.safetensors", "diffusion_pytorch_model.safetensors"]:
-                    for p in all_paths:
-                        if pattern in p:
-                            config['pretrained_model_name_or_path'] = p
-                            print(f"DEBUG: [FOUND] Transformer -> {p}", flush=True)
-                            break
-                    if config['pretrained_model_name_or_path'] != model_path: break
-
-                # Find Components
-                for p in all_paths:
-                    if "t5xxl" in p.lower() and p.endswith(".safetensors"): config['t5xxl'] = p
-                    if "clip_l" in p.lower() and p.endswith(".safetensors"): config['clip_l'] = p
-                    if ("vae" in p.lower() or "/ae/" in p.lower()) and p.endswith(".safetensors"): config['ae'] = p
-
-            print(f"DEBUG: Final Flux Base -> {config.get('pretrained_model_name_or_path')}", flush=True)
+            print(f"DEBUG: Final Training Path -> {config.get('pretrained_model_name_or_path')}", flush=True)
 
         config['train_data_dir'] = train_data_dir
         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)

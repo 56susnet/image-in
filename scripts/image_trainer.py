@@ -582,6 +582,10 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         if model_type == "flux":
             print("\n[FLUX GOD MODE] Starting precision asset fingerprinting...", flush=True)
             
+            # ENSURE MAIN MODEL PATH IS CORRECT
+            config['pretrained_model_name_or_path'] = model_path
+            print(f"   [VALIDATOR] Main Model Path: {model_path}", flush=True)
+            
             std_paths = {
                 'ae': "/cache/models/ae.safetensors",
                 'clip_l': "/cache/models/clip_l.safetensors",

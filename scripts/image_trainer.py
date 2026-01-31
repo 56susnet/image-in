@@ -607,64 +607,53 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                             del config["max_train_steps"]
                     config[key] = value
 
-        # [FINAL LOCK] FLUX ASSET ENFORCEMENT - RADAR PRO GLOBAL SEARCH
+        # [FINAL LOCK] FLUX ASSET ENFORCEMENT - SIMPLE TOURNAMENT FIX
         if model_type == "flux":
-            print(f"DEBUG: Flux Radar Pro - Investigating {model_path}...", flush=True)
+            print(f"DEBUG: Flux Asset Check for {model_path}...", flush=True)
             
-            def is_valid_flux(p):
-                # Validasi: Harus folder diffusers atau file safetensors > 10GB
-                if os.path.isdir(p) and os.path.isdir(os.path.join(p, "transformer")): return True
-                if os.path.isfile(p) and p.endswith(".safetensors") and os.path.getsize(p) > 10 * 1024**3: return True
-                return False
-
-            final_base = None
-            # 1. Cek model utama dulu
-            if is_valid_flux(model_path): final_base = model_path
+            # 1. Cek apakah model utama valid (Diffusers atau Single Safetensors)
+            is_valid = os.path.isdir(os.path.join(model_path, "transformer")) or \
+                       os.path.exists(os.path.join(model_path, "diffusion_pytorch_model.safetensors"))
             
-            # 2. Jika gagal, geledah SELURUH disk (/cache/models adalah prioritas)
-            if not final_base:
-                print(f"DEBUG: Path {model_path} invalid. Global Scanning for alternatives...", flush=True)
-                search_roots = ["/cache/models", "/cache/hf_cache", "/app/flux", "/workspace"]
-                for s_root in search_roots:
-                    if not os.path.exists(s_root): continue
-                    for root, dirs, files in os.walk(s_root):
-                        if "checkpoints" in root.lower(): continue
-                        # Cek apakah folder ini folder diffusers
-                        if "transformer" in dirs:
-                            test_p = root
-                            if is_valid_flux(test_p):
-                                final_base = test_p
-                                break
-                        # Cek apakah ada file unet/transformer besar
-                        for f in files:
-                            if f.endswith(".safetensors") and os.path.getsize(os.path.join(root, f)) > 10 * 1024**3:
-                                final_base = os.path.join(root, f)
-                                break
-                        if final_base: break
-                    if final_base: break
-
-            if final_base:
-                print(f"DEBUG: [RESOLVED] Using Flux Base -> {final_base}", flush=True)
-                config['pretrained_model_name_or_path'] = final_base
+            if is_valid:
+                config['pretrained_model_name_or_path'] = model_path
             else:
-                print(f"ERROR: No valid Flux weights found anywhere on disk!", flush=True)
-                print(f"HINT: Please run a test with a valid Flux model (e.g. rayonlabs/FLUX.1-dev) once to populate the cache.", flush=True)
-                raise FileNotFoundError("Flux base weights missing from VPS disk.")
+                # 2. Fallback: Cari di folder /cache (tempat downloader naruh file)
+                print(f"DEBUG: Model invalid/GGUF. Searching cache for base...", flush=True)
+                found_base = None
+                for root in ["/cache/models", "/app/flux", "/workspace"]:
+                    if not os.path.exists(root): continue
+                    for d in os.listdir(root):
+                        d_path = os.path.join(root, d)
+                        if os.path.isdir(os.path.join(d_path, "transformer")):
+                            found_base = d_path
+                            break
+                        # Cek file tunggal besar (>10GB)
+                        if os.path.isfile(d_path) and d_path.endswith(".safetensors") and os.path.getsize(d_path) > 10 * 1024**3:
+                            found_base = d_path
+                            break
+                    if found_base: break
+                
+                if found_base:
+                    print(f"DEBUG: [RESOLVED] Using Base -> {found_base}", flush=True)
+                    config['pretrained_model_name_or_path'] = found_base
+                else:
+                    # Last resort fallback if still nothing found
+                    config['pretrained_model_name_or_path'] = "/app/flux/unet.safetensors"
 
-            # Component Discovery (T5, CLIP, VAE) - Global Scan
-            def find_comp(name):
-                for r in ["/cache", "/app", "/workspace"]:
+            # Simple Component Fallback
+            def get_comp(name, fallback):
+                for r in ["/cache", "/app/flux"]:
                     if not os.path.exists(r): continue
                     for root, dirs, files in os.walk(r):
-                        if "checkpoints" in root.lower(): continue
                         for f in files:
-                            if name in f.lower() and f.endswith(".safetensors") and 200 * 1024**2 < os.path.getsize(os.path.join(root, f)) < 15 * 1024**3:
+                            if name in f.lower() and f.endswith(".safetensors"):
                                 return os.path.join(root, f)
-                return None
+                return fallback
 
-            if not config.get('ae'): config['ae'] = find_comp("ae") or "/app/flux/ae.safetensors"
-            if not config.get('clip_l'): config['clip_l'] = find_comp("clip_l") or "/app/flux/clip_l.safetensors"
-            if not config.get('t5xxl'): config['t5xxl'] = find_comp("t5xxl") or "/app/flux/t5xxl_fp16.safetensors"
+            config.setdefault('ae', get_comp("ae", "/app/flux/ae.safetensors"))
+            config.setdefault('clip_l', get_comp("clip_l", "/app/flux/clip_l.safetensors"))
+            config.setdefault('t5xxl', get_comp("t5xxl", "/app/flux/t5xxl_fp16.safetensors"))
 
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)

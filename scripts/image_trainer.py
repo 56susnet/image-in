@@ -589,25 +589,32 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
         # MAGIC FIX: STAGE TOKENIZER LOKAL UNTUK SDXL (BYPASS HF HUB)
-        if model_type == "sdxl" and model_path and os.path.isdir(model_path):
+        if model_type == "sdxl" and model_path:
             import shutil
-            print(f"DEBUG: Checking for local tokenizer in {model_path}...", flush=True)
             
-            # Tokenizer 1 (CLIP L) -> openai/clip-vit-large-patch14
-            tok1_src = os.path.join(model_path, "tokenizer")
-            tok1_dest = "openai/clip-vit-large-patch14"
-            if os.path.exists(tok1_src):
-                print(f"DEBUG: Staging tokenizer 1 to {tok1_dest}", flush=True)
-                if os.path.exists(tok1_dest): shutil.rmtree(tok1_dest)
-                shutil.copytree(tok1_src, tok1_dest)
-                
-            # Tokenizer 2 (OpenCLIP G) -> laion/CLIP-ViT-bigG-14-laion2B-39B-b160k
-            tok2_src = os.path.join(model_path, "tokenizer_2")
-            tok2_dest = "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k"
-            if os.path.exists(tok2_src):
-                print(f"DEBUG: Staging tokenizer 2 to {tok2_dest}", flush=True)
-                if os.path.exists(tok2_dest): shutil.rmtree(tok2_dest)
-                shutil.copytree(tok2_src, tok2_dest)
+            # Tentukan direktori model (handle jika model_path adalah file safetensors)
+            target_model_dir = model_path
+            if os.path.isfile(model_path):
+                target_model_dir = os.path.dirname(model_path)
+            
+            print(f"DEBUG: Checking for local tokenizer in {target_model_dir}...", flush=True)
+            
+            if os.path.isdir(target_model_dir):
+                # Tokenizer 1 (CLIP L) -> openai/clip-vit-large-patch14
+                tok1_src = os.path.join(target_model_dir, "tokenizer")
+                tok1_dest = "openai/clip-vit-large-patch14"
+                if os.path.exists(tok1_src):
+                    print(f"DEBUG: Staging tokenizer 1 to {tok1_dest}", flush=True)
+                    if os.path.exists(tok1_dest): shutil.rmtree(tok1_dest)
+                    shutil.copytree(tok1_src, tok1_dest)
+                    
+                # Tokenizer 2 (OpenCLIP G) -> laion/CLIP-ViT-bigG-14-laion2B-39B-b160k
+                tok2_src = os.path.join(target_model_dir, "tokenizer_2")
+                tok2_dest = "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k"
+                if os.path.exists(tok2_src):
+                    print(f"DEBUG: Staging tokenizer 2 to {tok2_dest}", flush=True)
+                    if os.path.exists(tok2_dest): shutil.rmtree(tok2_dest)
+                    shutil.copytree(tok2_src, tok2_dest)
 
         training_command = [
             "accelerate", "launch",

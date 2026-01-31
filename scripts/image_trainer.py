@@ -534,39 +534,44 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         if model_type == "flux":
             print(f"DEBUG: Performing FLUX asset discovery in {model_path}...", flush=True)
             
-            # Find Unet/Transformer - Check for specific shards or directory
-            transformer_path = os.path.join(model_path, "transformer")
-            if os.path.isdir(transformer_path):
-                # Kohya's flux_train_network.py works best if we point to the parent if shards exist,
-                # but sometimes it needs the folder. We'll set it to the folder.
-                config['pretrained_model_name_or_path'] = transformer_path
+            # Find Unet/Transformer - Kohya expects the ROOT if it's a diffusers structure
+            transformer_dir = os.path.join(model_path, "transformer")
+            if os.path.isdir(transformer_dir):
+                # If there's a transformer folder, pointing to root is correct for Kohya's discovery
+                config['pretrained_model_name_or_path'] = model_path
+                print(f"DEBUG: Found transformer folder, using root: {model_path}", flush=True)
             elif model_path.endswith(".safetensors"):
                 config['pretrained_model_name_or_path'] = model_path
             
+            def find_first_file(dir_path, extensions=[".safetensors", ".bin", ".pt"]):
+                if not os.path.isdir(dir_path): return dir_path
+                for ext in extensions:
+                    for f in os.listdir(dir_path):
+                        if f.endswith(ext): return os.path.join(dir_path, f)
+                return dir_path
+
             # Find T5 XXL - Crucial for offline
             t5_paths = [
                 os.path.join(model_path, "t5xxl"),
                 os.path.join(os.path.dirname(model_path), "google--t5-v1_1-xxl"),
-                "/cache/models/google--t5-v1_1-xxl",
-                "/cache/hf_cache/google--t5-v1_1-xxl"
+                "/cache/models/google--t5-v1_1-xxl"
             ]
             for p in t5_paths:
                 if os.path.exists(p):
-                    config['t5xxl'] = p
-                    print(f"DEBUG: Found T5XXL at {p}", flush=True)
+                    config['t5xxl'] = find_first_file(p)
+                    print(f"DEBUG: Found T5XXL component at {config['t5xxl']}", flush=True)
                     break
             
             # Find CLIP L
             clip_paths = [
                 os.path.join(model_path, "clip_l"),
                 os.path.join(os.path.dirname(model_path), "openai--clip-vit-large-patch14"),
-                "/cache/models/openai--clip-vit-large-patch14",
-                "/cache/hf_cache/openai--clip-vit-large-patch14"
+                "/cache/models/openai--clip-vit-large-patch14"
             ]
             for p in clip_paths:
                 if os.path.exists(p):
-                    config['clip_l'] = p
-                    print(f"DEBUG: Found CLIP_L at {p}", flush=True)
+                    config['clip_l'] = find_first_file(p)
+                    print(f"DEBUG: Found CLIP_L component at {config['clip_l']}", flush=True)
                     break
 
             # Find VAE / AE
@@ -577,8 +582,8 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
             ]
             for p in ae_paths:
                 if os.path.exists(p):
-                    config['ae'] = p
-                    print(f"DEBUG: Found AE (VAE) at {p}", flush=True)
+                    config['ae'] = find_first_file(p)
+                    print(f"DEBUG: Found AE (VAE) component at {config['ae']}", flush=True)
                     break
 
         config['train_data_dir'] = train_data_dir

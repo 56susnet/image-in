@@ -640,11 +640,9 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     path = find_surgical(files_found, "T5", 4.3, 11.0, avoid=["part", "of-", "shard"])
                     if path: set_flux_arg('t5xxl', path)
 
-            # SMART TOKENIZER INJECTION (OBAT OSERROR)
-            if assets["tokenizer_dirs"]:
-                # Ambil folder pertama yang keliatan seperti tokenizer CLIP/T5
-                config['tokenizer_cache_dir'] = assets["tokenizer_dirs"][0]
-                print(f"   [VALIDATOR] Tokenizer Cache Dir: {config['tokenizer_cache_dir']}", flush=True)
+            # ULTIMATE TOKENIZER FIX - FORCE CACHE DIR
+            config['tokenizer_cache_dir'] = "/cache/hf_cache"
+            print(f"   [VALIDATOR] Tokenizer Cache Dir: /cache/hf_cache (FORCED)", flush=True)
 
             print(f"[ASSET SYNC] AE: {config.get('ae')}, CLIP: {config.get('clip_l')}, T5: {config.get('t5xxl')}", flush=True)
 

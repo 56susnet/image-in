@@ -536,10 +536,15 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         if dataset_size < 15:
              print("[STRATEGY] Applying Universal Config for Micro-Dataset (<15 images) - FINAL OVERRIDE (SAFE)", flush=True)
              if "optimizer_args" not in config: config["optimizer_args"] = []
-             # Hanya gunakan d_coef=1.0 yang aman dan didukung oleh Prodigy standar
-             if "d_coef=1.0" not in config["optimizer_args"]: config["optimizer_args"].append("d_coef=1.0")
-             # Pastikan tidak ada d_coef ganda
-             config["optimizer_args"] = [arg for arg in config["optimizer_args"] if not arg.startswith("d_coef=") or arg == "d_coef=1.0"]
+             
+             # Hanya suntik d_coef=1.0 jika optimizerniernya adalah Prodigy (Biar Flux/Lion gak crash)
+             is_prodigy = config.get("optimizer_type", "").lower() == "prodigy"
+             if is_prodigy:
+                 if "d_coef=1.0" not in config["optimizer_args"]: config["optimizer_args"].append("d_coef=1.0")
+             
+             # Pastikan tidak ada d_coef ganda (Membersihkan sisa-sisa ID model jika ada)
+             if is_prodigy:
+                 config["optimizer_args"] = [arg for arg in config["optimizer_args"] if not arg.startswith("d_coef=") or arg == "d_coef=1.0"]
 
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)

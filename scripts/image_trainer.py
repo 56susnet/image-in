@@ -632,56 +632,71 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
-        # [NINJA TOKENIZER RESCUE - V8] - THE FINAL PRAYER
+        # [DEFINITIVE TOKENIZER STAGING]
         if model_type in ["sdxl", "flux"]:
             import shutil
-            
-            def get_tokenizer_path(name_part):
-                # 1. Cek langsung di Hub Cache (Paling pasti)
-                hub = "/cache/hf_cache/hub"
-                if os.path.exists(hub):
-                    for d in os.listdir(hub):
-                        if name_part.lower() in d.lower():
-                            snap = os.path.join(hub, d, "snapshots")
-                            if os.path.exists(snap):
-                                s = os.listdir(snap)
-                                if s: return os.path.join(snap, s[0])
-                # 2. Cek folder model (siapa tau ada)
-                if os.path.exists(os.path.join(model_path, "tokenizer")): return os.path.join(model_path, "tokenizer")
+            import subprocess
+
+            def find_tokenizer_dir(repo_keyword):
+                try:
+                    # Cari secara agresif di dalam /cache untuk folder yang punya tokenizer_config.json
+                    cmd = f"find /cache -name tokenizer_config.json 2>/dev/null | grep -i '{repo_keyword}' | head -n 1"
+                    path = subprocess.check_output(cmd, shell=True, text=True).strip()
+                    if path:
+                        return os.path.dirname(path)
+                except:
+                    pass
                 return None
 
-            print(f"DEBUG: Ninja V8 (Final Prayer) started...", flush=True)
+            print(f"--- TOKENIZER DIAGNOSTICS ---", flush=True)
             
-            map_targets = {
-                "openai/clip-vit-large-patch14": "clip",
-                "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k": "bigg",
-                "google/t5-v1_1-xxl": "t5"
-            }
+            # Map lokalisasi fisik
+            clip_l_src = find_tokenizer_dir("clip-vit-large-patch14")
+            t5_src = find_tokenizer_dir("t5-v1_1-xxl")
+            clip_g_src = find_tokenizer_dir("CLIP-ViT-bigG")
 
-            for dest_id, pattern in map_targets.items():
-                src = get_tokenizer_path(pattern)
+            # Folder tujuan absolut di dalam container
+            local_clip_l = "/app/tokenizer_fixed/clip_l"
+            local_t5 = "/app/tokenizer_fixed/t5xxl"
+            local_clip_g = "/app/tokenizer_fixed/clip_g"
+
+            # Proses Staging
+            staged_paths = {}
+            for src, dest, name in [(clip_l_src, local_clip_l, "CLIP_L"), 
+                                    (t5_src, local_t5, "T5XXL"), 
+                                    (clip_g_src, local_clip_g, "CLIP_G")]:
                 if src:
-                    dest = os.path.join("/app", dest_id)
-                    print(f"DEBUG: [V8] Found {pattern} at {src} -> Linking to {dest}", flush=True)
-                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    print(f"[FOUND] {name} at {src}. Staging to {dest}...", flush=True)
                     if os.path.exists(dest):
-                        if os.path.islink(dest): os.unlink(dest)
-                        else: shutil.rmtree(dest, ignore_errors=True)
-                    try: os.symlink(src, dest)
-                    except: shutil.copytree(src, dest, dirs_exist_ok=True)
+                        shutil.rmtree(dest)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    shutil.copytree(src, dest)
+                    staged_paths[name] = dest
+                else:
+                    print(f"[ERROR] {name} NOT FOUND in /cache. Check if downloader finished correctly.", flush=True)
 
+        # [STRICT TRAINING COMMAND]
         training_command = [
             "accelerate", "launch",
-            "--dynamo_backend", "no",
-            "--dynamo_mode", "default",
-            "--mixed_precision", "bf16",
             "--num_processes", "1",
-            "--num_machines", "1",
-            "--num_cpu_threads_per_process", "2",
+            "--mixed_precision", "bf16",
             f"/app/sd-script/{model_type}_train_network.py",
             "--config_file", config_path,
-            "--tokenizer_cache_dir", "/app"
         ]
+
+        # Inject path absolut ke command untuk mematikan lookup HuggingFace
+        if model_type == "flux":
+            if "CLIP_L" in staged_paths:
+                training_command.extend(["--clip_l", staged_paths["CLIP_L"]])
+            if "T5XXL" in staged_paths:
+                training_command.extend(["--t5xxl", staged_paths["T5XXL"]])
+        elif model_type == "sdxl":
+            if "CLIP_L" in staged_paths:
+                training_command.extend(["--tokenizer_cache_dir", "/app/tokenizer_fixed"])
+
+
+
+
 
 
 

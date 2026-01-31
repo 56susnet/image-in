@@ -1,12 +1,10 @@
 from pathlib import Path
 import os
-import core.constants as cst
 import trainer.constants as train_cst
 from trainer.utils.style_detection import detect_styles_in_prompts
 from core.models.utility_models import DpoDatasetType
 from core.models.utility_models import GrpoDatasetType
 from core.models.utility_models import InstructTextDatasetType
-from core.models.utility_models import ChatTemplateDatasetType
 from core.models.utility_models import ImageModelType
 
 def get_checkpoints_output_path(task_id: str, repo_name: str) -> str:

@@ -597,7 +597,6 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                 else:
                     # DIRECT INJECTION FOR ROOT KEYS (MAX_TRAIN_EPOCHS, TRAIN_BATCH_SIZE, ETC.)
                     if key == "max_train_epochs":
-                        # CRITICAL: If max_train_steps is already defined (likely from flux.json), do NOT override with epochs!
                         if "max_train_steps" in config or (lrs_settings and "max_train_steps" in lrs_settings):
                             if "max_train_epochs" in config:
                                 del config["max_train_epochs"]
@@ -607,6 +606,25 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                         if "max_train_steps" in config:
                             del config["max_train_steps"]
                     config[key] = value
+
+        # [FINAL LOCK] FLUX ASSET ENFORCEMENT (Must happen AFTER all overrides)
+        if model_type == "flux":
+            print(f"DEBUG: Flux Path Guard - Finalizing weights for {model_path}...", flush=True)
+            
+            # Use provided model ONLY if it has a valid transformer subfolder
+            if os.path.isdir(os.path.join(model_path, "transformer")):
+                config['pretrained_model_name_or_path'] = model_path
+                print(f"DEBUG: [LOCK] Using validated Diffusers path -> {model_path}", flush=True)
+            elif os.path.exists(os.path.join(model_path, "diffusion_pytorch_model.safetensors")):
+                 config['pretrained_model_name_or_path'] = os.path.join(model_path, "diffusion_pytorch_model.safetensors")
+                 print(f"DEBUG: [LOCK] Using direct weights path -> {config['pretrained_model_name_or_path']}", flush=True)
+            else:
+                # Absolute Fallback to tournament defaults
+                print(f"DEBUG: [LOCK] Incompatible model detected. FORCING system base fallback.", flush=True)
+                config['pretrained_model_name_or_path'] = "/app/flux/unet.safetensors"
+                config['ae'] = "/app/flux/ae.safetensors"
+                config['clip_l'] = "/app/flux/clip_l.safetensors"
+                config['t5xxl'] = "/app/flux/t5xxl_fp16.safetensors"
 
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)

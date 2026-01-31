@@ -632,58 +632,53 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
-        # [NINJA TOKENIZER RESCUE - V4] - BAR-BAR MODE
+        # [NINJA TOKENIZER RESCUE - V5] - THE TERMINATOR
         if model_type in ["sdxl", "flux"]:
             import shutil
-            import glob
             
-            def find_absolute_best(filename, pattern):
-                # [BAR-BAR] Cari di /cache, /app, /workspace tanpa ampun
-                all_possible = []
-                for base in ["/cache", "/app", "/workspace"]:
-                    if not os.path.exists(base): continue
-                    try:
-                        # Recursive search for the specific file
-                        found = glob.glob(f"{base}/**/{filename}", recursive=True)
-                        for f in found:
-                            # Abaikan folder sampah
-                            if any(x in f.lower() for x in ["output", "checkpoint", "sample", "dataset", "secure_checkpoints"]): continue
-                            # Jika cocok dengan pola, langsung ambil
-                            if pattern.lower() in f.lower(): return os.path.dirname(f)
-                            all_possible.append(f)
-                    except: pass
+            def terminator_find(pattern):
+                # 1. Jalur Pintas: Langsung cek folder HF Hub Cache
+                hub_path = "/cache/hf_cache/hub"
+                if os.path.exists(hub_path):
+                    for d in os.listdir(hub_path):
+                        # Hubungkan models--openai--clip... jadi openai/clip...
+                        clean_d = d.replace("models--", "").replace("--", "/")
+                        if pattern in clean_d:
+                            snap_dir = os.path.join(hub_path, d, "snapshots")
+                            if os.path.exists(snap_dir):
+                                snps = os.listdir(snap_dir)
+                                if snps: return os.path.join(snap_dir, snps[0])
                 
-                # Fallback: Ambil yang pertama nemu kalau pola gak match
-                if all_possible: return os.path.dirname(all_possible[0])
+                # 2. Fallback: Cari di /cache tapi dibatasi (Depth Limit)
+                for base in ["/cache", "/app"]:
+                    if not os.path.exists(base): continue
+                    for root, dirs, files in os.walk(base):
+                        # Cek kedalaman biar gak macet
+                        if root.count(os.sep) - base.count(os.sep) > 5: 
+                            del dirs[:]
+                            continue
+                        if pattern in root.lower() and ("vocab.json" in files or "tokenizer_config.json" in files):
+                            return root
                 return None
 
-            print(f"DEBUG: Ninja Tokenizer V4 (Bar-Bar Search) started for {model_type}...", flush=True)
-            config_map = {
-                "clip_l": ("vocab.json", "patch14"),
-                "clip_g": ("tokenizer_config.json", "bigg-14"),
-                "t5": ("special_tokens_map.json", "t5")
-            }
+            print(f"DEBUG: Ninja Terminator Search V5 started...", flush=True)
             staging_map = {
-                "clip_l": "openai/clip-vit-large-patch14",
-                "clip_g": "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k",
-                "t5": "google/t5-v1_1-xxl"
+                "openai/clip-vit-large-patch14": "clip",
+                "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k": "bigg",
+                "google/t5-v1_1-xxl": "t5"
             }
 
-            for key, (fname, pat) in config_map.items():
-                src = find_absolute_best(fname, pat)
+            for dest_id, pattern in staging_map.items():
+                src = terminator_find(pattern)
                 if src:
-                    dest = os.path.join("/app", staging_map[key])
-                    print(f"DEBUG: [NINJA-V4] Found {key} at {src} -> Staging to {dest}", flush=True)
+                    dest = os.path.join("/app", dest_id)
+                    print(f"DEBUG: [TERMINATOR] Found {pattern} at {src} -> Staging to {dest}", flush=True)
                     os.makedirs(os.path.dirname(dest), exist_ok=True)
                     if os.path.exists(dest):
                         if os.path.islink(dest): os.unlink(dest)
                         else: shutil.rmtree(dest, ignore_errors=True)
-                    try: 
-                        os.symlink(src, dest)
-                        print(f"DEBUG: [NINJA-V4] Symlink created for {key}", flush=True)
-                    except:
-                        shutil.copytree(src, dest, dirs_exist_ok=True)
-                        print(f"DEBUG: [NINJA-V4] Copy created for {key}", flush=True)
+                    try: os.symlink(src, dest)
+                    except: shutil.copytree(src, dest, dirs_exist_ok=True)
 
         training_command = [
             "accelerate", "launch",

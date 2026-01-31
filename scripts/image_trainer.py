@@ -690,7 +690,7 @@ async def main():
     os.makedirs(train_cst.HUGGINGFACE_CACHE_PATH, exist_ok=True)
 
     model_path = get_model_path(train_paths.get_image_base_model_path(args.model), model_type=args.model_type)
-    print(\"Preparing dataset...\", flush=True)
+    print("Preparing dataset...", flush=True)
 
     prepare_dataset(
         training_images_zip_path=train_paths.get_image_training_zip_save_path(args.task_id),

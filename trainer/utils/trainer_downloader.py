@@ -179,24 +179,39 @@ async def main():
         print("Downloading necessary CLIP/T5 models for offline mode...", flush=True)
         # Champion Trick from image-yaya: Use Tokenizer to initialize the cache structure perfectly
         from transformers import CLIPTokenizer
+        import time
+        
+        def download_with_retry(func, max_retries=3, base_delay=5):
+            """Retry download with exponential backoff"""
+            for attempt in range(max_retries):
+                try:
+                    return func()
+                except Exception as e:
+                    if attempt == max_retries - 1:
+                        raise e
+                    delay = base_delay * (2 ** attempt)
+                    print(f"Download failed (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
+                    print(f"Retrying in {delay} seconds...", flush=True)
+                    time.sleep(delay)
+        
         print("Initializing CLIP Tokenizers to populate cache structure...", flush=True)
-        CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14", cache_dir=cst.HUGGINGFACE_CACHE_PATH)
-        CLIPTokenizer.from_pretrained("laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", cache_dir=cst.HUGGINGFACE_CACHE_PATH)
+        download_with_retry(lambda: CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14", cache_dir=cst.HUGGINGFACE_CACHE_PATH))
+        download_with_retry(lambda: CLIPTokenizer.from_pretrained("laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", cache_dir=cst.HUGGINGFACE_CACHE_PATH))
         
         # Now follow up with full snapshot download
         from huggingface_hub import snapshot_download
         print("Downloading full snapshots...", flush=True)
-        snapshot_download(repo_id="openai/clip-vit-large-patch14", cache_dir=cst.HUGGINGFACE_CACHE_PATH, local_dir_use_symlinks=False)
-        snapshot_download(repo_id="laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", cache_dir=cst.HUGGINGFACE_CACHE_PATH, local_dir_use_symlinks=False)
+        download_with_retry(lambda: snapshot_download(repo_id="openai/clip-vit-large-patch14", cache_dir=cst.HUGGINGFACE_CACHE_PATH, local_dir_use_symlinks=False))
+        download_with_retry(lambda: snapshot_download(repo_id="laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", cache_dir=cst.HUGGINGFACE_CACHE_PATH, local_dir_use_symlinks=False))
         
         print("Downloading T5 component for Flux...", flush=True)
-        snapshot_download(
+        download_with_retry(lambda: snapshot_download(
             repo_id="google/t5-v1_1-xxl",
             repo_type="model",
             cache_dir=cst.HUGGINGFACE_CACHE_PATH,
             local_dir_use_symlinks=False,
             allow_patterns=["tokenizer_config.json", "spiece.model", "special_tokens_map.json", "config.json"],
-        )
+        ))
     else:
         dataset_path, _ = await download_text_dataset(args.task_id, args.dataset, args.file_format, dataset_dir)
         model_path = await download_axolotl_base_model(args.model, model_dir)

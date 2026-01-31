@@ -519,6 +519,22 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)
         config['output_dir'] = output_dir
 
+        # TENTUKAN ALAMAT MODEL (BIAR KOHYA GAK NYASAR)
+        if model_type == "flux":
+            config["pretrained_model_name_or_path"] = "/app/flux/unet"
+        else:
+            config["pretrained_model_name_or_path"] = model_path
+        # Suntik Bumbu SDXL Bos (DIM, ALPHA, & ARGS)
+        config["network_dim"] = model_params.get("network_dim", 32)
+        config["network_alpha"] = model_params.get("network_alpha", 32)
+        
+        if "network_args" in model_params:
+            if "network_args" not in config: config["network_args"] = []
+            # Tambahkan args unik (LoCon, algo, dll) tanpa duplikat
+            for arg in model_params["network_args"]:
+                if arg not in config["network_args"]:
+                    config["network_args"].append(arg)
+
         # SIMPAN & SUNTIK DATA FINAL (PENYIMPANAN RESEP KE /TMP/)
         section_map = {
              "optimizer_type": (None, "optimizer_type"),

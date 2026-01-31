@@ -632,50 +632,58 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
-        # [DEFINITIVE TOKENIZER STAGING]
+        # [PROFESSIONAL ASSET DISCOVERY & TOKENIZER STAGING]
         if model_type in ["sdxl", "flux"]:
             import shutil
-            import subprocess
+            import os
 
-            def find_tokenizer_dir(repo_keyword):
-                try:
-                    # Cari secara agresif di dalam /cache untuk folder yang punya tokenizer_config.json
-                    cmd = f"find /cache -name tokenizer_config.json 2>/dev/null | grep -i '{repo_keyword}' | head -n 1"
-                    path = subprocess.check_output(cmd, shell=True, text=True).strip()
-                    if path:
-                        return os.path.dirname(path)
-                except:
-                    pass
+            print("--- ASSET AUDIT: PRE-TRAINING CHECK ---", flush=True)
+            
+            def scan_for_component(signatures, keywords):
+                """Mencari directory yang mengandung file signature dan cocok dengan keyword."""
+                for root, dirs, files in os.walk("/cache"):
+                    if all(s in files for s in signatures):
+                        if any(k.lower() in root.lower() for k in keywords):
+                            return root
                 return None
 
-            print(f"--- TOKENIZER DIAGNOSTICS ---", flush=True)
+            # 1. Identifikasi lokasi komponen secara faktual di /cache
+            # CLIP L: Biasanya ada vocab.json dan tokenizer_config.json
+            src_clip_l = scan_for_component(["vocab.json", "tokenizer_config.json"], ["clip", "large", "patch14"])
             
-            # Map lokalisasi fisik
-            clip_l_src = find_tokenizer_dir("clip-vit-large-patch14")
-            t5_src = find_tokenizer_dir("t5-v1_1-xxl")
-            clip_g_src = find_tokenizer_dir("CLIP-ViT-bigG")
+            # T5XXL: Biasanya ada special_tokens_map.json dan tokenizer_config.json
+            src_t5 = scan_for_component(["special_tokens_map.json", "tokenizer_config.json"], ["t5", "xxl"])
+            
+            # CLIP G: Mirip CLIP L tapi ada di folder berbeda
+            src_clip_g = scan_for_component(["vocab.json", "tokenizer_config.json"], ["clip", "bigg"])
 
-            # Folder tujuan absolut di dalam container
-            local_clip_l = "/app/tokenizer_fixed/clip_l"
-            local_t5 = "/app/tokenizer_fixed/t5xxl"
-            local_clip_g = "/app/tokenizer_fixed/clip_g"
-
-            # Proses Staging
+            # 2. Staging ke folder kerja absolut (/app/staged_assets)
             staged_paths = {}
-            for src, dest, name in [(clip_l_src, local_clip_l, "CLIP_L"), 
-                                    (t5_src, local_t5, "T5XXL"), 
-                                    (clip_g_src, local_clip_g, "CLIP_G")]:
-                if src:
-                    print(f"[FOUND] {name} at {src}. Staging to {dest}...", flush=True)
-                    if os.path.exists(dest):
-                        shutil.rmtree(dest)
-                    os.makedirs(os.path.dirname(dest), exist_ok=True)
-                    shutil.copytree(src, dest)
-                    staged_paths[name] = dest
-                else:
-                    print(f"[ERROR] {name} NOT FOUND in /cache. Check if downloader finished correctly.", flush=True)
+            mapping_configs = [
+                (src_clip_l, "/app/staged_assets/clip_l", "CLIP_L"),
+                (src_t5, "/app/staged_assets/t5xxl", "T5XXL"),
+                (src_clip_g, "/app/staged_assets/clip_g", "CLIP_G")
+            ]
 
-        # [STRICT TRAINING COMMAND]
+            for src, dest, label in mapping_configs:
+                if src:
+                    print(f"[VERIFIED] Found {label} source at: {src}", flush=True)
+                    if os.path.exists(dest):
+                        if os.path.islink(dest): os.unlink(dest)
+                        else: shutil.rmtree(dest)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    try:
+                        os.symlink(src, dest)
+                        print(f"[STAGED] {label} ready at: {dest} (symlink)", flush=True)
+                        staged_paths[label] = dest
+                    except Exception as e:
+                        print(f"[STAGED] {label} falling back to copy due to: {e}", flush=True)
+                        shutil.copytree(src, dest, dirs_exist_ok=True)
+                        staged_paths[label] = dest
+                else:
+                    print(f"[MISSING] Could not find {label} in /cache. Offline loading may fail.", flush=True)
+
+        # [STRICT TRAINING COMMAND CONSTRUCTION]
         training_command = [
             "accelerate", "launch",
             "--num_processes", "1",
@@ -684,7 +692,8 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
             "--config_file", config_path,
         ]
 
-        # Inject path absolut ke command untuk mematikan lookup HuggingFace
+        # 3. Inject Path Absolut ke Argumen Script Training
+        # Ini mematikan pencarian otomatis library transformers
         if model_type == "flux":
             if "CLIP_L" in staged_paths:
                 training_command.extend(["--clip_l", staged_paths["CLIP_L"]])
@@ -692,7 +701,8 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
                 training_command.extend(["--t5xxl", staged_paths["T5XXL"]])
         elif model_type == "sdxl":
             if "CLIP_L" in staged_paths:
-                training_command.extend(["--tokenizer_cache_dir", "/app/tokenizer_fixed"])
+                # SDXL menggunakan directory cache secara kolektif
+                training_command.extend(["--tokenizer_cache_dir", "/app/staged_assets"])
 
 
 

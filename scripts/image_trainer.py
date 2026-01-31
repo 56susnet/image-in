@@ -531,51 +531,41 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         
         # [RESTORATION] FLUX Asset Discovery Logic
         if model_type == "flux":
-            print(f"DEBUG: Flux Radar - Scanning for assets in {model_path}...", flush=True)
+            print(f"DEBUG: Flux Brute-Force Radar - Scanning {model_path}...", flush=True)
             
-            # Helper: Temukan file apa saja yang ada di dalam (Deep Scan)
-            all_files = []
+            all_paths = []
             for root, dirs, files in os.walk(model_path):
-                for f in files: all_files.append(os.path.join(root, f))
+                for f in files: all_paths.append(os.path.join(root, f))
             
-            print(f"DEBUG: Scanned {len(all_files)} files. Looking for Flux components...", flush=True)
+            # Print sample files to stop the guesswork
+            print(f"DEBUG: Found {len(all_paths)} files. Sample: {all_paths[:5]}", flush=True)
 
-            # 1. TEMUKAN TRANSFORMER (Prioritas: Index -> Weights Utama -> Shard pertama)
-            transformer_match = None
-            for target in ["diffusion_pytorch_model.safetensors.index.json", "diffusion_pytorch_model.safetensors", "transformer.safetensors", "diffusion_pytorch_model-00001-of-"]:
-                for f in all_files:
-                    if target in f:
-                        transformer_match = f
+            # 1. PENCARIAN TRANSFORMER (Cari file bobot atau index)
+            found_t = None
+            # Prioritas: Index -> shard 1 -> transformer file
+            for pattern in [".index.json", "-00001-of-", "transformer.safetensors", "diffusion_pytorch_model.safetensors"]:
+                for p in all_paths:
+                    if pattern in p:
+                        found_t = p
                         break
-                if transformer_match: break
+                if found_t: break
             
-            if transformer_match:
-                config['pretrained_model_name_or_path'] = transformer_match
-                print(f"DEBUG: Found Transformer -> {transformer_match}", flush=True)
+            if found_t:
+                config['pretrained_model_name_or_path'] = found_t
+                print(f"DEBUG: [CORE] Transformer located at -> {found_t}", flush=True)
             else:
-                config['pretrained_model_name_or_path'] = model_path
-                print(f"DEBUG: No specific transformer found, using root.", flush=True)
+                print(f"DEBUG: [WARNING] No transformer found, using root fallback.", flush=True)
 
-            # 2. TEMUKAN T5XXL
-            for f in all_files:
-                if "t5xxl" in f.lower() and (f.endswith(".safetensors") or f.endswith(".bin")):
-                    config['t5xxl'] = f
-                    print(f"DEBUG: Found T5XXL -> {f}", flush=True)
-                    break
-            
-            # 3. TEMUKAN CLIP L
-            for f in all_files:
-                if "clip_l" in f.lower() and (f.endswith(".safetensors") or f.endswith(".bin")):
-                    config['clip_l'] = f
-                    print(f"DEBUG: Found CLIP_L -> {f}", flush=True)
-                    break
+            # 2. PENCARIAN KOMPONEN (T5, CLIP, VAE)
+            for p in all_paths:
+                if "t5xxl" in p.lower() and (p.endswith(".safetensors") or p.endswith(".bin")):
+                    config['t5xxl'] = p
+                if "clip_l" in p.lower() and (p.endswith(".safetensors") or p.endswith(".bin")):
+                    config['clip_l'] = p
+                if ("vae" in p.lower() or "/ae/" in p.lower()) and (p.endswith(".safetensors") or p.endswith(".bin")):
+                    config['ae'] = p
 
-            # 4. TEMUKAN AE (VAE)
-            for f in all_files:
-                if ("/ae/" in f.lower() or "/vae/" in f.lower()) and (f.endswith(".safetensors") or f.endswith(".bin")):
-                    config['ae'] = f
-                    print(f"DEBUG: Found AE/VAE -> {f}", flush=True)
-                    break
+            print(f"DEBUG: Discovery Complete. T5: {config.get('t5xxl')}, CLIP: {config.get('clip_l')}, AE: {config.get('ae')}", flush=True)
 
         config['train_data_dir'] = train_data_dir
         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)

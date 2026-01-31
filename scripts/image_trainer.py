@@ -505,37 +505,41 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                 config["t5xxl"] = "/app/flux/t5xxl_fp16.safetensors"
             else:
                 # Offline/Standalone Mode: Gunakan model_path hasil download
+                model_dir = model_path if os.path.isdir(model_path) else os.path.dirname(model_path)
+                config["pretrained_model_name_or_path"] = model_path
+                
                 print(f"[FLUX-ADAPT] /app/flux not found or poisoned. Final model path: {model_path}", flush=True)
                 
-                # Jika model_path adalah directory (Diffusers), biarkan Kohya handle otomatis
-                if os.path.isdir(model_path):
-                    print("[FLUX-ADAPT] Full Repo Folder detected. Letting Kohya handle components.", flush=True)
-                    config["pretrained_model_name_or_path"] = model_path
-                    # Hapus manual override agar tidak tabrakan dengan internal loader Kohya
-                    for k in ["ae", "clip_l", "t5xxl"]: 
-                        if k in config: del config[k]
-                else:
-                    config["pretrained_model_name_or_path"] = model_path
-                    # Single File Mode: Cari komponen pelengkap di folder yang sama
-                    model_dir = os.path.dirname(model_path)
-                    def find_flux_component(name_pattern, preferred_subdir):
-                        pref = os.path.join(model_dir, preferred_subdir)
-                        if os.path.isdir(pref):
-                            for r, _, fs in os.walk(pref):
-                                for f in fs:
-                                    if f.endswith(".safetensors"): return os.path.join(r, f)
-                        for r, _, fs in os.walk(model_dir):
+                # Cek komponen di dalam folder download (Cari ae, clip, t5 secara cerdas)
+                def find_flux_component(name_pattern, preferred_subdir):
+                    # Priority 1: Preferred subdir (Diffusers style)
+                    pref = os.path.join(model_dir, preferred_subdir)
+                    if os.path.isdir(pref):
+                        for r, _, fs in os.walk(pref):
                             for f in fs:
-                                if name_pattern.lower() in f.lower() and f.endswith(".safetensors"):
-                                    return os.path.join(r, f)
-                        return None
+                                if f.endswith(".safetensors"): return os.path.join(r, f)
+                    
+                    # Priority 2: Direct match in model_dir
+                    for r, _, fs in os.walk(model_dir):
+                        if preferred_subdir and preferred_subdir in r: continue
+                        for f in fs:
+                            if name_pattern.lower() in f.lower() and f.endswith(".safetensors"):
+                                return os.path.join(r, f)
+                    return None
 
-                    flux_ae = find_flux_component("ae", "vae")
-                    flux_clip = find_flux_component("clip_l", "text_encoder")
-                    flux_t5 = find_flux_component("t5xxl", "text_encoder_2")
-                    if flux_ae: config["ae"] = flux_ae
-                    if flux_clip: config["clip_l"] = flux_clip
-                    if flux_t5: config["t5xxl"] = flux_t5
+                flux_ae = find_flux_component("ae", "vae")
+                flux_clip = find_flux_component("clip_l", "text_encoder")
+                flux_t5 = find_flux_component("t5xxl", "text_encoder_2")
+
+                if flux_ae: 
+                    config["ae"] = flux_ae
+                    print(f"[FLUX-ADAPT] Found AE: {flux_ae}", flush=True)
+                if flux_clip: 
+                    config["clip_l"] = flux_clip
+                    print(f"[FLUX-ADAPT] Found CLIP_L: {flux_clip}", flush=True)
+                if flux_t5: 
+                    config["t5xxl"] = flux_t5
+                    print(f"[FLUX-ADAPT] Found T5XXL: {flux_t5}", flush=True)
         else:
             config["pretrained_model_name_or_path"] = model_path
 

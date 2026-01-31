@@ -578,148 +578,127 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                             del config["max_train_steps"]
                     config[key] = value
 
-        # [SURGICAL FIX] FLUX ASSET ENFORCEMENT - TOURNAMENT RESILIENCE
+        # [SURGICAL FIX] FLUX ASSET ENFORCEMENT - TOURNAMENT RESILIENCE (FROM CHAMPION AUDIT 07E71178)
         if model_type == "flux":
-            print(f"DEBUG: Flux Asset Discovery for {model_path}...", flush=True)
+            print("\n[FLUX GOD MODE] Starting precision asset fingerprinting...", flush=True)
             
-            def get_best_flux_base(path):
-                # 1. Jika folder standar Diffusers (punya subfolder transformer)
-                if os.path.isdir(os.path.join(path, "transformer")): return path
-                # 2. Jika folder berisi satu file safetensors besar (mhnakif / GGUF / Single file)
-                if os.path.isdir(path):
-                    files = [f for f in os.listdir(path) if f.endswith(".safetensors")]
-                    if files:
-                        biggest = max(files, key=lambda x: os.path.getsize(os.path.join(path, x)))
-                        if os.path.getsize(os.path.join(path, biggest)) > 5 * 1024**3:
-                            return os.path.join(path, biggest)
-                # 3. Last resort: Gunakan path apa adanya
-                return path
-
-            config['pretrained_model_name_or_path'] = get_best_flux_base(model_path)
+            std_paths = {
+                'ae': "/cache/models/ae.safetensors",
+                'clip_l': "/cache/models/clip_l.safetensors",
+                't5xxl': "/cache/models/t5xxl.safetensors"
+            }
             
-            # Simple Component Discovery (AE, CLIP, T5) - Non-Blocking
-            def find_flux_comp(name, default):
-                for r in [model_path, "/cache", "/app/flux"]:
-                    if not os.path.exists(r): continue
-                    for root, _, files in os.walk(r):
-                        for f in files:
-                            if name in f.lower() and f.endswith(".safetensors"):
-                                return os.path.join(root, f)
-                return default
+            def set_flux_arg(k, v):
+                config[k] = v
+                if 'model_arguments' not in config: config['model_arguments'] = {}
+                config['model_arguments'][k] = v
 
-            config['ae'] = find_flux_comp("ae", "/app/flux/ae.safetensors")
-            config['clip_l'] = find_flux_comp("clip_l", "/app/flux/clip_l.safetensors")
-            config['t5xxl'] = find_flux_comp("t5xxl", "/app/flux/t5xxl_fp16.safetensors")
+            for key, path in std_paths.items():
+                if os.path.exists(path):
+                    set_flux_arg(key, path)
+                    print(f"   [VALIDATOR] Found {key} at {path}", flush=True)
+
+            missing = [k for k in ['ae', 'clip_l', 't5xxl'] if not os.path.exists(config.get(k, ""))]
+            if missing:
+                def search_for_flux_files():
+                    search_bases = ["/cache/models", "/app/models", "/app/flux", "/workspace/models", os.path.dirname(model_path)]
+                    found = []
+                    for b_dir in search_bases:
+                        if not os.path.exists(b_dir): continue
+                        for root, _, files in os.walk(b_dir):
+                            for f in files:
+                                if f.endswith(".safetensors"):
+                                    p = os.path.join(root, f)
+                                    sz = os.path.getsize(p) / (1024**3)
+                                    found.append({"path": p, "size": sz, "root": root})
+                    return found
+
+                files_found = search_for_flux_files()
+                if 'ae' in missing:
+                    path = find_surgical(files_found, "AE", 0.3, 0.45, must_contain="ae")
+                    if path: set_flux_arg('ae', path)
+                if 'clip_l' in missing:
+                    path = find_surgical(files_found, "CLIP", 0.2, 0.45) or "/app/models/clip_l.safetensors"
+                    if path: set_flux_arg('clip_l', path)
+                if 't5xxl' in missing:
+                    path = find_surgical(files_found, "T5", 4.3, 11.0, avoid=["part", "of-", "shard"])
+                    if path: set_flux_arg('t5xxl', path)
+
+            final_ae = config.get('ae')
+            final_clip = config.get('clip_l')
+            final_t5 = config.get('t5xxl')
+            print(f"[ASSET SYNC] AE: {final_ae}, CLIP: {final_clip}, T5: {final_t5}", flush=True)
+
+        config['train_data_dir'] = train_data_dir
+        if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)
+        config['output_dir'] = output_dir
+
+        # Apply Overrides (Priority: Autoepoch < LRS)
+        section_map = {
+             "optimizer_type": (None, "optimizer_type"),
+             "optimizer_args": (None, "optimizer_args"),
+             "unet_lr": (None, "unet_lr"),
+             "text_encoder_lr": (None, "text_encoder_lr"), # Added for coherence
+             "network_dim": (None, "network_dim"),
+             "network_alpha": (None, "network_alpha"),
+             "noise_offset": (None, "noise_offset"),
+             "multires_noise_iterations": (None, "multires_noise_iterations"),
+             "multires_noise_discount": (None, "multires_noise_discount")
+        }
+        
+        configs_to_apply = []
+        if size_config: configs_to_apply.append(("Size-Based", size_config))
+        if lrs_settings: configs_to_apply.append(("LRS-Override", lrs_settings))
+            
+        for name, cfg in configs_to_apply:
+            for key, value in cfg.items():
+                if key in section_map:
+                    sec, target = section_map[key]
+                    if sec:
+                        if sec not in config: config[sec] = {}
+                        config[sec][target] = value
+                    else: config[target] = value
+                else:
+                    if key == "max_train_epochs":
+                        if "max_train_steps" in config or (lrs_settings and "max_train_steps" in lrs_settings):
+                            if "max_train_epochs" in config: del config["max_train_epochs"]
+                            continue 
+                        if "max_train_steps" in config: del config["max_train_steps"]
+                    config[key] = value
 
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)
         print(f"Created config at {config_path}", flush=True)
         return config_path, output_dir
 
-# PHASE 4 - MENYALAKAN MESIN DAN MENGAWASI JALANNYA TRAINING
 def run_training(model_type, config_path, output_dir, hours_to_complete=None, script_start_time=None, model_path=None):
     print(f"Starting training with config: {config_path}", flush=True)
-    
+
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
-    # MEMAKSA HF_HOME KE /TMP/ UNTUK BYPASS ERROR "READ-ONLY"
     env = os.environ.copy()
     env.update({
         "HF_HOME": train_cst.HUGGINGFACE_CACHE_PATH,
-        "TRANSFORMERS_CACHE": train_cst.HUGGINGFACE_CACHE_PATH,
         "PYTHONUNBUFFERED": "1"
     })
-    # MENJALANKAN PERINTAH ACCELERATE ATAU AI-TOOLKIT
+
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
-        # [PROFESSIONAL ASSET DISCOVERY & TOKENIZER STAGING]
-        if model_type in ["sdxl", "flux"]:
-            import shutil
-
-            print("--- ASSET AUDIT: PRE-TRAINING CHECK ---", flush=True)
-            
-            def scan_for_component(signatures, keywords):
-                """Mencari directory yang mengandung file signature dan cocok dengan keyword."""
-                for root, dirs, files in os.walk("/cache"):
-                    if all(s in files for s in signatures):
-                        if any(k.lower() in root.lower() for k in keywords):
-                            return root
-                return None
-
-            # 1. Identifikasi lokasi komponen secara faktual di /cache
-            # CLIP L: Biasanya ada vocab.json dan tokenizer_config.json
-            src_clip_l = scan_for_component(["vocab.json", "tokenizer_config.json"], ["clip", "large", "patch14"])
-            
-            # T5XXL: Biasanya ada special_tokens_map.json dan tokenizer_config.json
-            src_t5 = scan_for_component(["special_tokens_map.json", "tokenizer_config.json"], ["t5", "xxl"])
-            
-            # CLIP G: Mirip CLIP L tapi ada di folder berbeda
-            src_clip_g = scan_for_component(["vocab.json", "tokenizer_config.json"], ["clip", "bigg"])
-
-            # 2. Staging ke folder kerja absolut (/app/staged_assets)
-            staged_paths = {}
-            mapping_configs = [
-                (src_clip_l, "/app/staged_assets/clip_l", "CLIP_L"),
-                (src_t5, "/app/staged_assets/t5xxl", "T5XXL"),
-                (src_clip_g, "/app/staged_assets/clip_g", "CLIP_G")
-            ]
-
-            for src, dest, label in mapping_configs:
-                if src:
-                    print(f"[VERIFIED] Found {label} source at: {src}", flush=True)
-                    if os.path.exists(dest):
-                        if os.path.islink(dest): os.unlink(dest)
-                        else: shutil.rmtree(dest)
-                    os.makedirs(os.path.dirname(dest), exist_ok=True)
-                    try:
-                        os.symlink(src, dest)
-                        print(f"[STAGED] {label} ready at: {dest} (symlink)", flush=True)
-                        staged_paths[label] = dest
-                    except Exception as e:
-                        print(f"[STAGED] {label} falling back to copy due to: {e}", flush=True)
-                        shutil.copytree(src, dest, dirs_exist_ok=True)
-                        staged_paths[label] = dest
-                else:
-                    print(f"[MISSING] Could not find {label} in /cache. Offline loading may fail.", flush=True)
-
-        # [STRICT TRAINING COMMAND CONSTRUCTION]
+        # EXACT CHAMPION COMMAND (07E71178)
         training_command = [
             "accelerate", "launch",
-            "--num_processes", "1",
+            "--dynamo_backend", "no",
+            "--dynamo_mode", "default",
             "--mixed_precision", "bf16",
+            "--num_processes", "1",
+            "--num_machines", "1",
+            "--num_cpu_threads_per_process", "2",
             f"/app/sd-script/{model_type}_train_network.py",
-            "--config_file", config_path,
+            "--config_file", config_path
         ]
-
-        # 3. Inject Path Absolut ke Argumen Script Training
-        # Ini mematikan pencarian otomatis library transformers
-        if model_type == "flux":
-            if "CLIP_L" in staged_paths:
-                training_command.extend(["--clip_l", staged_paths["CLIP_L"]])
-            if "T5XXL" in staged_paths:
-                training_command.extend(["--t5xxl", staged_paths["T5XXL"]])
-        elif model_type == "sdxl":
-            if "CLIP_L" in staged_paths:
-                # SDXL menggunakan directory cache secara kolektif
-                training_command.extend(["--tokenizer_cache_dir", "/app/staged_assets"])
-
-
-
-
-
-
-
 
     try:
         print(f"Launching {model_type.upper()} training with command: {' '.join(training_command)}", flush=True)
-        
-        # FORCE OFFLINE MODE & CACHE PATHS
-        env = os.environ.copy()
-        env["HF_HOME"] = "/cache/hf_cache"
-        env["TRANSFORMERS_CACHE"] = "/cache/hf_cache"
-        env["PYTHONUNBUFFERED"] = "1"
-        # Hilangkan OFFLINE flag agar transformers mau pake symlink kita sebagai 'local folder'
-        
         process = subprocess.Popen(
             training_command,
             stdout=subprocess.PIPE,

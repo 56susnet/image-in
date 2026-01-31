@@ -38,6 +38,7 @@ def get_model_path(path: str) -> str:
             biggest_file = max(files, key=lambda x: os.path.getsize(os.path.join(path, x)))
             return os.path.join(path, biggest_file)
     return path
+
 # GABUNG SETTINGAN
 def merge_model_config(default_config: dict, model_config: dict) -> dict:
     merged = {}
@@ -52,6 +53,7 @@ def merge_model_config(default_config: dict, model_config: dict) -> dict:
                 merged[k] = v
 
     return merged if merged else None
+
 # SENSUS JUMLAH FOTO
 def count_images_in_directory(directory_path: str) -> int:
     image_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'}
@@ -75,6 +77,7 @@ def count_images_in_directory(directory_path: str) -> int:
         return 0
     
     return count
+
 # BEDAH CACHE (UKURAN)
 def find_surgical(files_found, name, golden_min, golden_max, must_contain=None, avoid=["part", "of-", "sharded"]):
     matches = []
@@ -95,6 +98,7 @@ def find_surgical(files_found, name, golden_min, golden_max, must_contain=None, 
         matches.sort(key=lambda x: (-x[0], -x[1]))
         return matches[0][2]
     return None
+
 # SCAN AUTOEPOCH
 def load_size_based_config(model_type: str, is_style: bool, dataset_size: int) -> dict:
     config_dir = os.path.join(script_dir, "autoepoch") 
@@ -131,6 +135,7 @@ def load_size_based_config(model_type: str, is_style: bool, dataset_size: int) -
     except Exception as e:
         print(f"Warning: Could not load autoepoch config from {config_file}: {e}", flush=True)
         return None
+
 # CEK KLASIFIKASI JUMLAH DATASET
 def get_dataset_size_category(dataset_size: int) -> str:
     """MAP DATASET SIZE TO CATEGORY LABELS USED IN LRS CONFIG."""
@@ -143,6 +148,7 @@ def get_dataset_size_category(dataset_size: int) -> str:
     
     print(f"DEBUG_LRS: Image count {dataset_size} mapped to category -> [{cat.upper()}]", flush=True)
     return cat
+
 # AMBIL RESEP LRS (OPTIMASI)
 def get_config_for_model(lrs_config: dict, model_hash: str, dataset_size: int = None, raw_model_name: str = None) -> dict:
     if not isinstance(lrs_config, dict):
@@ -222,7 +228,7 @@ def load_lrs_config(model_type: str, is_style: bool) -> dict:
         print(f"Warning: Could not load LRS config from {config_file}: {e}", flush=True)
         return None
 
-# 231 - 305: DETEKSI PERSON/STYLE
+# DETEKSI PERSON/STYLE
 def detect_is_style(train_data_dir):
     """DETECT IF THE DATASET CONTAINS STYLE-BASED PROMPTS USING BALANCED LOGIC."""
     try:
@@ -287,12 +293,9 @@ def detect_is_style(train_data_dir):
         print(f"DEBUG_CLASSIFY: Person Ratio: {person_ratio:.2f}, Max Style Ratio: {max_style_ratio:.2f} ({top_style})", flush=True)
 
         # LOGIC DETEKSI BARU (LEBIH SENSITIF TERHADAP STYLE)
-        # 1. Jika sinyal Style sangat kuat (> 20%), kita abaikan keberadaan Orang (misal: "Oil Painting of a Woman").
         if max_style_ratio >= 0.20:
             print("DEBUG_CLASSIFY: Decision -> [STYLE] (Strong Signal)", flush=True)
             return True
-            
-        # 2. Jika sinyal Style moderat (> 10%) dan Orang tidak mendominasi (< 20%).
         if max_style_ratio >= 0.10 and person_ratio < 0.20:
             print("DEBUG_CLASSIFY: Decision -> [STYLE] (Moderate Signal)", flush=True)
             return True
@@ -303,15 +306,14 @@ def detect_is_style(train_data_dir):
     except Exception as e:
         print(f"Warning during style detection: {e}", flush=True)
         return False
-# PHASE 3: MERACIK FILE INSTRUKSI TRAINING (.TOML / .YAML) PALING AKURAT
+
+# PHASE III - MENGUNCI TIPE TUGAS DAN MERACIK FILE INSTRUKSI
 def create_config(task_id, model_path, model_name, model_type, expected_repo_name, trigger_word, hours_to_complete=None):
     train_data_dir = os.path.join(train_cst.IMAGE_CONTAINER_IMAGES_PATH, task_id)
     
-    # MENGUNCI TIPE TUGAS
     is_style = detect_is_style(train_data_dir)
-    detection_method = "Dataset-driven (25% Style Threshold)"
+    detection_method = "Dataset-driven"
     
-    # JALUR PINTAS METADATA
     if not is_style:
          if expected_repo_name and "style" in expected_repo_name.lower() and "person" not in expected_repo_name.lower():
               is_style = True
@@ -320,15 +322,11 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     task_type = "style" if is_style else "person"
     print(f"DEBUG_TYPE: Task detected as [{task_type.upper()}] via {detection_method}", flush=True)
 
-    # HITUNG FOTO & FOLDER HASIL
     dataset_size = count_images_in_directory(train_data_dir)
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
     output_dir = train_paths.get_checkpoints_output_path(task_id, expected_repo_name or "output")
     
-    # MENCOCOKAN FILE RESEP DASAR
     config_dir = os.path.join(script_dir, "core", "config")
-    
-    # CARI TEMPLATE YANG COCOK
     potential_templates = [
         f"base_diffusion_{model_type}_{task_type}.toml",
         f"base_diffusion_{model_type}_{task_type}.yaml",
@@ -347,8 +345,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     if not config_template_path:
         raise FileNotFoundError(f"Could not find a valid config template for {model_type} in {config_dir}")
 
-    # DAPUR RANK MODEL (DAFTAR BUMBU - BUMBU MODEL).
-    # BUMBU PERSON
+    # DAPUR RANK MODEL
     network_config_person = {
         "stabilityai/stable-diffusion-xl-base-1.0": 235, "Lykon/dreamshaper-xl-1-0": 235, "Lykon/art-diffusion-xl-0.9": 235,
         "SG161222/RealVisXL_V4.0": 467, "stablediffusionapi/protovision-xl-v6.6": 235, "stablediffusionapi/omnium-sdxl": 235,
@@ -363,7 +360,6 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         "bghira/terminus-xl-velocity-v2": 235, "ifmain/UltraReal_Fine-Tune": 467
     }
 
-    # BUMBU STYLE
     network_config_style = {
         "stabilityai/stable-diffusion-xl-base-1.0": 235, "Lykon/dreamshaper-xl-1-0": 235, "Lykon/art-diffusion-xl-0.9": 235,
         "SG161222/RealVisXL_V4.0": 235, "stablediffusionapi/protovision-xl-v6.6": 235, "stablediffusionapi/omnium-sdxl": 235,
@@ -378,13 +374,11 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         "bghira/terminus-xl-velocity-v2": 235, "ifmain/UltraReal_Fine-Tune": 235
     }
 
-    # BUMBU FLUX
     network_config_flux = {
         "dataautogpt3/FLUX-MonochromeManga": 350, "mikeyandfriends/PixelWave_FLUX.1-dev_03": 350,
         "rayonlabs/FLUX.1-dev": 350, "mhnakif/fluxunchained-dev": 350
     }
 
-    # RACIK KEKUATAN LORA (MAPPING RANK, ALPHA, DAN LOCON)
     config_mapping = {
         228: {"network_dim": 32, "network_alpha": 32, "network_args": ["conv_dim=8", "conv_alpha=8", "algo=locon"]},
         235: {"network_dim": 32, "network_alpha": 32, "network_args": ["conv_dim=8", "conv_alpha=8", "algo=locon"]},
@@ -397,13 +391,12 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         350: {"network_dim": 128, "network_alpha": 128, "network_args": ["train_double_block_indices=all", "train_single_block_indices=all", "train_t5xxl=True"]}
     }
 
-    # CEK IDENTITAS MESIN (SMART DETECTION QWEN/Z-IMAGE/SDXL).
     if model_type == ImageModelType.Z_IMAGE.value:
         config_id = 999
     elif model_type == ImageModelType.FLUX.value:
         config_id = network_config_flux.get(model_name, 350)
     elif model_type == ImageModelType.QWEN_IMAGE.value:
-        config_id = 350 # QWEN PAKAI RANK 128 SEPERTI FLUX/CHAMPION
+        config_id = 350 
     else:
         target_dict = network_config_style if is_style else network_config_person
         config_id = target_dict.get(model_name, 235)
@@ -419,7 +412,7 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     lrs_config = load_lrs_config(model_type, is_style)
     if lrs_config:
         clean_model_name = model_name.strip().strip("'").strip('"')
-        model_hash = hash_model(clean_model_name)
+        model_hash = hashlib.sha256(clean_model_name.encode('utf-8')).hexdigest()
         lrs_settings = get_config_for_model(lrs_config, model_hash, dataset_size, clean_model_name)
 
     if dataset_size > 0:
@@ -432,13 +425,11 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         if 'config' in config and 'process' in config['config']:
             for process in config['config']['process']:
                 if 'model' in process:
-                    
                     if model_path.endswith(".safetensors"):
                         process['model']['name_or_path'] = os.path.dirname(model_path)
                     else:
                         process['model']['name_or_path'] = model_path
 
-                 
                     if model_type == ImageModelType.Z_IMAGE.value:
                         process['model']['assistant_lora_path'] = os.path.join(train_cst.HUGGINGFACE_CACHE_PATH, "zimage_turbo_training_adapter_v2.safetensors")
                         
@@ -447,29 +438,16 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                         process['training_folder'] = output_dir
                 
                 if 'datasets' in process:
-                    
-                    rep = cst.DIFFUSION_SDXL_REPEATS if model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS
-                    sub_pref = f"{rep}_"
+                    rep_factor = cst.DIFFUSION_SDXL_REPEATS if model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS
                     dataset_path = train_data_dir
-                    if os.path.exists(train_data_dir):
-                        for d in os.listdir(train_data_dir):
-                            if d.startswith(sub_pref) and os.path.isdir(os.path.join(train_data_dir, d)):
-                                dataset_path = os.path.join(train_data_dir, d)
-                                break
-                    
                     for dataset in process['datasets']:
                         dataset['folder_path'] = dataset_path
 
-                # HITUNG LANGKAH OTOMATIS (LOGIKA AUTO-SCALING YAML) 
                 if 'train' not in process: process['train'] = {}
-                
-                
-                rep_factor = cst.DIFFUSION_SDXL_REPEATS if model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS
                 
                 def calculate_steps(epochs):
                     batch_size = process.get('train', {}).get('batch_size', 1)
                     if dataset_size == 0: return epochs
-                    
                     return int(epochs * (dataset_size * rep_factor / batch_size))
 
                 if lrs_settings:
@@ -478,42 +456,28 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                         elif key in ["optimizer_type", "optimizer"]: process['train']['optimizer'] = value
                         elif key in ["max_train_epochs", "steps"]:
                             process['train']['steps'] = calculate_steps(value) if key == "max_train_epochs" else value
-                        elif key in ["rank", "alpha", "conv_rank", "conv_alpha"]:
-                    
+                        elif key in ["rank", "alpha"]:
                             if 'network' not in process: process['network'] = {}
                             if key == "rank": process['network']['linear'] = value
                             elif key == "alpha": process['network']['linear_alpha'] = value
-                            else: process['network'][key] = value 
                         elif key == "optimizer_args" and isinstance(value, list):
                             opt_params = {}
                             for item in value:
                                 if "=" in item:
                                     k, v = item.split("=", 2)
-                                    if v.lower() == "true": v = True
-                                    elif v.lower() == "false": v = False
-                                    else:
-                                        try: v = float(v) if "." in v else int(v)
-                                        except ValueError: pass
                                     opt_params[k.strip()] = v
                             process['train']['optimizer_params'] = opt_params
                         else: process['train'][key] = value
 
                 if trigger_word:
                     process['trigger_word'] = trigger_word
-
-                # Auto-Adaptive Duration Logic REMOVED (Replaced by Hard Kill Manager)
-                # if (model_type in [ImageModelType.QWEN_IMAGE.value, ImageModelType.Z_IMAGE.value]) and hours_to_complete and hours_to_complete > 0:
-                #     pass
         
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.yaml")
         save_config(config, config_path)
-        print(f"Created ai-toolkit config at {config_path} with Auto-Scaling", flush=True)
         return config_path, output_dir
     else:
         with open(config_template_path, "r") as file:
             config = toml.load(file)
-        # [CLEANUP] Redundant Flux block removed to prioritize Surgical Fix below.
-        pass
 
         config['train_data_dir'] = train_data_dir
         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)
@@ -524,81 +488,29 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
             config["pretrained_model_name_or_path"] = "/app/flux/unet"
         else:
             config["pretrained_model_name_or_path"] = model_path
+
         # Suntik Bumbu SDXL Bos (DIM, ALPHA, & ARGS)
         config["network_dim"] = model_params.get("network_dim", 32)
         config["network_alpha"] = model_params.get("network_alpha", 32)
         
         if "network_args" in model_params:
             if "network_args" not in config: config["network_args"] = []
-            # Tambahkan args unik (LoCon, algo, dll) tanpa duplikat
             for arg in model_params["network_args"]:
                 if arg not in config["network_args"]:
                     config["network_args"].append(arg)
 
-        # SIMPAN & SUNTIK DATA FINAL (PENYIMPANAN RESEP KE /TMP/)
+        # SIMPAN & SUNTIK DATA FINAL
         section_map = {
-             "optimizer_type": (None, "optimizer_type"),
-             "optimizer_args": (None, "optimizer_args"),
-             "unet_lr": (None, "unet_lr"),
-             "network_dim": (None, "network_dim"),
-             "network_alpha": (None, "network_alpha"),
-             "t5xxl": (None, "t5xxl"),
-             "clip_l": (None, "clip_l"),
-             "ae": (None, "ae"),
-             "noise_offset": (None, "noise_offset"),
-             "multires_noise_iterations": (None, "multires_noise_iterations"),
-             "multires_noise_discount": (None, "multires_noise_discount")
+             "optimizer_type": (None, "optimizer_type"), "optimizer_args": (None, "optimizer_args"),
+             "unet_lr": (None, "unet_lr"), "text_encoder_lr": (None, "text_encoder_lr"),
+             "network_dim": (None, "network_dim"), "network_alpha": (None, "network_alpha"),
+             "t5xxl": (None, "t5xxl"), "clip_l": (None, "clip_l"), "ae": (None, "ae"),
+             "noise_offset": (None, "noise_offset"), "multires_noise_iterations": (None, "multires_noise_iterations"),
+             "multires_noise_discount": (None, "multires_noise_discount"),
+             "max_train_epochs": (None, "max_train_epochs"), "max_train_steps": (None, "max_train_steps")
         }
         
-        # APPLY OVERRIDES (FUNCTION)
-        configs_to_apply = []
-        if size_config:
-            configs_to_apply.append(("Size-Based", size_config))
-        if lrs_settings:
-            configs_to_apply.append(("LRS-Override", lrs_settings))
-            
-        for name, cfg in configs_to_apply:
-            for key, value in cfg.items():
-                if key in section_map:
-                    sec, target = section_map[key]
-                    if sec:
-                        if sec not in config: config[sec] = {}
-                        config[sec][target] = value
-                    else:
-                        config[target] = value
-                else:
-                    # DIRECT INJECTION FOR ROOT KEYS (MAX_TRAIN_EPOCHS, TRAIN_BATCH_SIZE, ETC.)
-                    if key == "max_train_epochs":
-                        if "max_train_steps" in config or (lrs_settings and "max_train_steps" in lrs_settings):
-                            if "max_train_epochs" in config:
-                                del config["max_train_epochs"]
-                            print(f"   [SUPPRESS] Deleting max_train_epochs to prioritize Champion Steps", flush=True)
-                            continue 
-                        print(f"   [OVERRIDE] Setting {key} = {value} from {name}", flush=True)
-                        if "max_train_steps" in config:
-                            del config["max_train_steps"]
-                    config[key] = value
-
-        if model_type == "flux":
-            print(f"[FLUX CONFIG] Using default paths from TOML.", flush=True)
-
-        config['train_data_dir'] = train_data_dir
-        if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)
-        config['output_dir'] = output_dir
-
-        # Apply Overrides (Priority: Autoepoch < LRS)
-        section_map = {
-             "optimizer_type": (None, "optimizer_type"),
-             "optimizer_args": (None, "optimizer_args"),
-             "unet_lr": (None, "unet_lr"),
-             "text_encoder_lr": (None, "text_encoder_lr"), # Added for coherence
-             "network_dim": (None, "network_dim"),
-             "network_alpha": (None, "network_alpha"),
-             "noise_offset": (None, "noise_offset"),
-             "multires_noise_iterations": (None, "multires_noise_iterations"),
-             "multires_noise_discount": (None, "multires_noise_discount")
-        }
-        
+        # APPLY OVERRIDES (Priority: Autoepoch < LRS)
         configs_to_apply = []
         if size_config: configs_to_apply.append(("Size-Based", size_config))
         if lrs_settings: configs_to_apply.append(("LRS-Override", lrs_settings))
@@ -619,18 +531,26 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                         if "max_train_steps" in config: del config["max_train_steps"]
                     config[key] = value
 
+        # UNIVERSAL CONFIG STRATEGY (FINAL OVERRIDE - MICRO-DATASET FIX)
+        if dataset_size < 15:
+             print("[STRATEGY] Applying Universal Config for Micro-Dataset (<15 images) - FINAL OVERRIDE", flush=True)
+             if "optimizer_args" not in config: config["optimizer_args"] = []
+             if "exposure=30" not in config["optimizer_args"]: config["optimizer_args"].append("exposure=30")
+             if "d_coef=1.0" not in config["optimizer_args"]: config["optimizer_args"].append("d_coef=1.0")
+             config["optimizer_args"] = [arg for arg in config["optimizer_args"] if not arg.startswith("d_coef=") or arg == "d_coef=1.0"]
+
         config_path = os.path.join(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, f"{task_id}.toml")
         save_config_toml(config, config_path)
         print(f"Created config at {config_path}", flush=True)
         return config_path, output_dir
 
+# PHASE IV - TRAINING EXECUTION
 def run_training(model_type, config_path, output_dir, hours_to_complete=None, script_start_time=None, model_path=None):
     print(f"Starting training with config: {config_path}", flush=True)
 
     is_ai_toolkit = model_type in [ImageModelType.Z_IMAGE.value, ImageModelType.QWEN_IMAGE.value]
     env = os.environ.copy()
     
-    # SINKRONISASI TOTAL DENGAN FLUX_TEST.SH & DOWNLOADER (LOGIKA 07E71178)
     target_cache = "/cache/hf_cache" 
     env.update({
         "HF_HOME": target_cache,
@@ -643,7 +563,6 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
     if is_ai_toolkit:
         training_command = ["python3", "/app/ai-toolkit/run.py", config_path]
     else:
-        # EXACT CHAMPION COMMAND DARI COMMIT 07E71178 (THE ULTIMATE SYNC)
         training_command = [
             "accelerate", "launch",
             "--dynamo_backend", "no",
@@ -658,95 +577,40 @@ def run_training(model_type, config_path, output_dir, hours_to_complete=None, sc
 
     try:
         print(f"Launching {model_type.upper()} training with command: {' '.join(training_command)}", flush=True)
-        process = subprocess.Popen(
-            training_command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            env=env
-        )
-
-        for line in process.stdout:
-            print(line, end="", flush=True)
-
+        process = subprocess.Popen(training_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env=env)
+        for line in process.stdout: print(line, end="", flush=True)
         return_code = process.wait()
-        if return_code != 0:
-            raise subprocess.CalledProcessError(return_code, training_command)
-
+        if return_code != 0: raise subprocess.CalledProcessError(return_code, training_command)
         print("Training subprocess completed successfully.", flush=True)
-
     except subprocess.CalledProcessError as e:
         print("Training subprocess failed!", flush=True)
-        print(f"Exit Code: {e.returncode}", flush=True)
-        print(f"Command: {' '.join(e.cmd) if isinstance(e.cmd, list) else e.cmd}", flush=True)
         raise RuntimeError(f"Training subprocess failed with exit code {e.returncode}")
 
-    # MENARIK KEMBALI MODEL JIKA NYASAR KE FOLDER DEFAULT.
-    if output_dir:
-        try:
-            default_loc = "/app/checkpoints/last.safetensors"
-            if os.path.exists(default_loc):
-                print(f"[FIX] Moving checkpoint from {default_loc} to {output_dir}", flush=True)
-                os.makedirs(output_dir, exist_ok=True)
-                shutil.move(default_loc, os.path.join(output_dir, "last.safetensors"))
-                print(f"[FIX] Successfully moved to {output_dir}/last.safetensors", flush=True)
-        except Exception as e:
-            print(f"[FIX] Error moving checkpoint: {e}", flush=True)
-
-# PHASE 5 - MEMBERI IDENTITAS DAN MERAPIKAN MODEL SEBELUM DIKIRIM
-# MEMBERIKAN SIDIK JARI SHA256 PADA MODEL
-def hash_model(model: str) -> str:
-    model_bytes = model.encode('utf-8')
-    hashed = hashlib.sha256(model_bytes).hexdigest()
-    return hashed
-
-
+# PHASE V - MEMBERI IDENTITAS DAN MERAPIKAN MODEL
 def detect_subfolder(base_folder: str) -> str | None: 
-    # MENCARI MODEL YANG NGUMPET DI DALAM FOLDER CHECKPOINT
     if not os.path.isdir(base_folder): return None
     for item in os.listdir(base_folder):
         item_path = os.path.join(base_folder, item)
         if not os.path.isdir(item_path): continue
-        has_checkpoint_files = False
         for file in os.listdir(item_path):
-            if file.endswith('.safetensors'):
-                has_checkpoint_files = True
-                break
-        if has_checkpoint_files: return item_path
+            if file.endswith('.safetensors'): return item_path
     return None
-
 
 def patch_model_metadata(output_dir: str, base_model_id: str):
     try:
-        # MENULIS README.MD DAN JSON BIAR VALIDATOR JADI SENANG
-        # PATCH ADAPTER_CONFIG.JSON (FUNCTION)
         adapter_config_path = os.path.join(output_dir, "adapter_config.json")
         if os.path.exists(adapter_config_path):
-            with open(adapter_config_path, "r") as f:
-                config = json.load(f)
+            with open(adapter_config_path, "r") as f: config = json.load(f)
             config["base_model_name_or_path"] = base_model_id
-            with open(adapter_config_path, "w") as f:
-                json.dump(config, f, indent=2)
-            print(f"[METADATA] UPDATED ADAPTER_CONFIG.JSON", flush=True)
-
-        # PATCH README.MD (FUNCTION)
+            with open(adapter_config_path, "w") as f: json.dump(config, f, indent=2)
         readme_path = os.path.join(output_dir, "README.md")
         if os.path.exists(readme_path):
-            with open(readme_path, "r") as f:
-                lines = f.readlines()
-            new_lines = []
-            for line in lines:
-                if line.strip().startswith("base_model:"):
-                    new_lines.append(f"base_model: {base_model_id}\n")
-                else: new_lines.append(line)
-            with open(readme_path, "w") as f:
-                f.writelines(new_lines)
-            print(f"[METADATA] UPDATED README.MD", flush=True)
-    except Exception as e:
-        print(f"[METADATA] WARNING: {e}", flush=True)
+            with open(readme_path, "r") as f: lines = f.readlines()
+            new_lines = [f"base_model: {base_model_id}\n" if l.strip().startswith("base_model:") else l for l in lines]
+            with open(readme_path, "w") as f: f.writelines(new_lines)
+    except Exception as e: print(f"[METADATA] WARNING: {e}", flush=True)
 
-# PHASE 6 - MENGATUR URUTAN EKSEKUSI DARI AWAL SAMPAI AKHIR
+# PHASE VI - MENGATUR URUTAN EKSEKUSI
 async def main():
     script_start_time = time.time()
     print("--------------------------------------------------", flush=True)
@@ -754,27 +618,23 @@ async def main():
     print("--------------------------------------------------", flush=True)
     print("---STARTING TRAINING ---", flush=True)
     
-    # MEMBACA UPDATE TASK DI TERMINAL.
     parser = argparse.ArgumentParser(description="Image Model Training Script")
-    parser.add_argument("--task-id", required=True, help="Task ID")
-    parser.add_argument("--model", required=True, help="Model name or path")
-    parser.add_argument("--dataset-zip", required=True, help="Link to dataset zip file")
-    parser.add_argument("--model-type", required=True, choices=["sdxl", "flux", "qwen-image", "z-image"], help="Model type")
-    parser.add_argument("--expected-repo-name", help="Expected repository name")
-    parser.add_argument("--trigger-word", help="Trigger word for the training")
-    parser.add_argument("--hours-to-complete", type=float, required=True, help="Number of hours to complete the task")
+    parser.add_argument("--task-id", required=True)
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--dataset-zip", required=True)
+    parser.add_argument("--model-type", required=True, choices=["sdxl", "flux", "qwen-image", "z-image"])
+    parser.add_argument("--expected-repo-name")
+    parser.add_argument("--trigger-word")
+    parser.add_argument("--hours-to-complete", type=float, required=True)
     args = parser.parse_args()
 
-    # MENYIAPKAN FOLDER KERJA DAN PATH MODEL DASAR
     os.makedirs(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, exist_ok=True)
     os.makedirs(train_cst.IMAGE_CONTAINER_IMAGES_PATH, exist_ok=True)
     os.makedirs(train_cst.HUGGINGFACE_CACHE_PATH, exist_ok=True)
 
     model_path = get_model_path(train_paths.get_image_base_model_path(args.model))
-
     print("Preparing dataset...", flush=True)
 
-    # MENGIRIM DAN REPEAT FOTO DATASET KE DATASET FOLDER
     prepare_dataset(
         training_images_zip_path=train_paths.get_image_training_zip_save_path(args.task_id),
         training_images_repeat=cst.DIFFUSION_SDXL_REPEATS if args.model_type == ImageModelType.SDXL.value else cst.DIFFUSION_FLUX_REPEATS,
@@ -784,25 +644,10 @@ async def main():
         output_dir=train_cst.IMAGE_CONTAINER_IMAGES_PATH
     )
 
-    # MEMANGGIL PHASE III UNTUK BUAT RESEP
-    config_path, output_dir = create_config(
-        args.task_id,
-        model_path,
-        args.model,
-        args.model_type,
-        args.expected_repo_name,
-        args.trigger_word,
-        hours_to_complete=args.hours_to_complete
-    )
-
-    # MEMANGGIL PHASE IV UNTUK MEMULAI TRAINING
-    if shutil.which("docker"):
-        subprocess.run(["docker", "rm", "-f", "image-trainer-example"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    
+    config_path, output_dir = create_config(args.task_id, model_path, args.model, args.model_type, args.expected_repo_name, args.trigger_word, args.hours_to_complete)
     run_training(args.model_type, config_path, output_dir, args.hours_to_complete, script_start_time, model_path=model_path)
 
-# PHASE 7 - FINAL CHECK DAN UPLOAD HASIL KE HUGGINGFACE
-    # CEK TOKEN DAN USERNAME HUGGING FACE
+# PHASE VII - FINAL CHECK DAN UPLOAD HASIL
     hf_token = os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_TOKEN")
     hf_user = os.getenv("HUGGINGFACE_USERNAME") or os.getenv("HF_USERNAME")
     repo_name = args.expected_repo_name
@@ -816,16 +661,10 @@ async def main():
 
     try:
         login(token=hf_token); api = HfApi()
-
-        # MEMASTIKAN FOLDER MANA YANG BERISI MODEL FINAL (FUNCTION)
         final_upload_dir = output_dir
         checkpoint_sub = detect_subfolder(output_dir)
-        if checkpoint_sub:
-            print(f"[UPLOAD] DETECTED NESTED CHECKPOINT: {checkpoint_sub}", flush=True)
-            final_upload_dir = checkpoint_sub
+        if checkpoint_sub: final_upload_dir = checkpoint_sub
 
-        # MEMBONGKAR SUBFOLDER BIAR FILE MODEL ADA DI LANTAI UTAMA (FUNCTION)
-        print(f"[UPLOAD] FLATTENING DIRECTORY: {final_upload_dir}", flush=True)
         for root, dirs, files in os.walk(final_upload_dir):
             for file in files:
                 if file.endswith((".safetensors", ".json", ".md", ".yaml", ".toml")):
@@ -835,24 +674,15 @@ async def main():
                         if os.path.exists(dst_path): os.remove(dst_path)
                         shutil.move(src_path, dst_path)
 
-        # PATCHING TERAKHIR SEBELUM PUSH. (FUNCTION)
         target_model = args.model
         if args.model_type == ImageModelType.SDXL.value and ("visionix" in str(args.model).lower() or "sdxl" in str(output_dir).lower()):
             target_model = "stabilityai/stable-diffusion-xl-base-1.0"
         
         patch_model_metadata(final_upload_dir, target_model)
-
-        # MENYALAKAN API UNTUK PROSES UPLOAD REPOSITORY (FUNCTION)
-        print(f"[UPLOAD] CREATING REPOSITORY {repo_id}...", flush=True)
         api.create_repo(repo_id=repo_id, token=hf_token, exist_ok=True)
-        
-        print(f"[UPLOAD] UPLOADING FOLDER {final_upload_dir}...", flush=True)
         api.upload_folder(repo_id=repo_id, folder_path=final_upload_dir, commit_message=f"Upload {args.task_id}")
-        
         print(f"[UPLOAD] SUCCESS! VIEW AT HTTPS://HUGGINGFACE.CO/{repo_id}", flush=True)
-
-    except Exception as e:
-        print(f"[UPLOAD] ERROR: {e}", flush=True)
+    except Exception as e: print(f"[UPLOAD] ERROR: {e}", flush=True)
 
 if __name__ == "__main__":
     asyncio.run(main())

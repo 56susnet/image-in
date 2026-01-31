@@ -101,10 +101,6 @@ def load_size_based_config(model_type: str, is_style: bool, dataset_size: int) -
     
     if model_type == ImageModelType.FLUX.value:
         config_file = os.path.join(config_dir, "a-epochflux.json")
-    elif model_type == ImageModelType.QWEN_IMAGE.value:
-        config_file = os.path.join(config_dir, "a-epochqwen.json")
-    elif model_type == ImageModelType.Z_IMAGE.value:
-        config_file = os.path.join(config_dir, "a-epochz.json")
     elif is_style:
         config_file = os.path.join(config_dir, "a-epochstyle.json")
     else:
@@ -476,19 +472,6 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                     
                     return int(epochs * (dataset_size * rep_factor / batch_size))
 
-             
-                # Size config overrides removed
-                # if size_config:
-                #     for key, value in size_config.items():
-                #         if key == "max_train_epochs": process['train']['steps'] = calculate_steps(value)
-                #         elif key == "optimizer_type": process['train']['optimizer'] = value
-                #         elif key in ["rank", "alpha"]:
-                #             block = 'network' if 'network' in process else 'adapter'
-                #             if block not in process: process[block] = {}
-                #             process[block][key if block == 'adapter' else ('linear' if key == 'rank' else 'linear_alpha')] = value
-                #         else: process['train'][key] = value
-
-             
                 if lrs_settings:
                     for key, value in lrs_settings.items():
                         if key in ["unet_lr", "text_encoder_lr", "learning_rate"]: process['train']['lr'] = value
@@ -580,67 +563,8 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                             del config["max_train_steps"]
                     config[key] = value
 
-        # [SURGICAL FIX] FLUX ASSET ENFORCEMENT - LOGIKA JUARA (ADAPTASI 07E71178)
         if model_type == "flux":
-            print("\n[FLUX GOD MODE] Starting precision asset fingerprinting...", flush=True)
-            
-            # SUNTIK MAIN MODEL PATH (MENGHINDARI SALAH CARI UNET)
-            config['pretrained_model_name_or_path'] = model_path
-            print(f"   [VALIDATOR] Main Model: {model_path}", flush=True)
-            
-            # 1. HARD-PRIORITY (DIREKTORI STANDAR)
-            std_paths = {
-                'ae': "/cache/models/ae.safetensors",
-                'clip_l': "/cache/models/clip_l.safetensors",
-                't5xxl': "/cache/models/t5xxl.safetensors"
-            }
-            
-            def set_flux_arg(k, v):
-                config[k] = v
-                if 'model_arguments' not in config: config['model_arguments'] = {}
-                config['model_arguments'][k] = v
-
-            for key, path in std_paths.items():
-                if os.path.exists(path):
-                    set_flux_arg(key, path)
-                    print(f"   [VALIDATOR] Found {key} at {path}", flush=True)
-
-            # 2. FALLBACK/DISCOVERY (MENCARI KE DALAM SEMUA FOLDER CACHE)
-            def search_for_flux_assets():
-                search_bases = ["/cache/models", "/cache/hf_cache", "/app/models", "/app/flux", os.path.dirname(model_path)]
-                res = {"files": [], "tokenizer_dirs": []}
-                for b_dir in search_bases:
-                    if not os.path.exists(b_dir): continue
-                    for root, dirs, files in os.walk(b_dir):
-                        # Cari file besar (Weights)
-                        for f in files:
-                            if f.endswith(".safetensors"):
-                                p = os.path.join(root, f)
-                                try:
-                                    sz = os.path.getsize(p) / (1024**3)
-                                    res["files"].append({"path": p, "size": sz, "root": root})
-                                except: continue
-                        # Cari folder Tokenizer
-                        if "tokenizer_config.json" in files:
-                            res["tokenizer_dirs"].append(root)
-                return res
-
-            assets = search_for_flux_assets()
-            files_found = assets["files"]
-            
-            missing = [k for k in ['ae', 'clip_l', 't5xxl'] if not os.path.exists(config.get(k, ""))]
-            if missing:
-                if 'ae' in missing:
-                    path = find_surgical(files_found, "AE", 0.3, 0.45, must_contain="ae")
-                    if path: set_flux_arg('ae', path)
-                if 'clip_l' in missing:
-                    path = find_surgical(files_found, "CLIP", 0.2, 0.45) or "/app/models/clip_l.safetensors"
-                    if path: set_flux_arg('clip_l', path)
-                if 't5xxl' in missing:
-                    path = find_surgical(files_found, "T5", 4.3, 11.0, avoid=["part", "of-", "shard"])
-                    if path: set_flux_arg('t5xxl', path)
-
-            print(f"[ASSET SYNC] AE: {config.get('ae')}, CLIP: {config.get('clip_l')}, T5: {config.get('t5xxl')}", flush=True)
+            print(f"[FLUX CONFIG] Using default paths from TOML.", flush=True)
 
         config['train_data_dir'] = train_data_dir
         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)

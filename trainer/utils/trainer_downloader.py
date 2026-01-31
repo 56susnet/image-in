@@ -175,46 +175,6 @@ async def main():
                 adapters_dir=adapters_dir
             )
             print(f"Qwen-Image adapter downloaded to: {qwen_adapter_path}", flush=True)
-        
-        print("Downloading necessary CLIP/T5 models for offline mode...", flush=True)
-        # Champion Trick from image-yaya: Use Tokenizer to initialize the cache structure perfectly
-        from transformers import CLIPTokenizer
-        import time
-        
-        def download_with_retry(func, max_retries=3, base_delay=5):
-            """Retry download with exponential backoff"""
-            for attempt in range(max_retries):
-                try:
-                    return func()
-                except Exception as e:
-                    if attempt == max_retries - 1:
-                        raise e
-                    delay = base_delay * (2 ** attempt)
-                    print(f"Download failed (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
-                    print(f"Retrying in {delay} seconds...", flush=True)
-                    time.sleep(delay)
-        
-        print("Initializing CLIP Tokenizers to populate cache structure...", flush=True)
-        # Download to local_dir to create proper folder structure
-        import os
-        clip_dir = os.path.join(cst.HUGGINGFACE_CACHE_PATH, "models--openai--clip-vit-large-patch14")
-        clip_big_dir = os.path.join(cst.HUGGINGFACE_CACHE_PATH, "models--laion--CLIP-ViT-bigG-14-laion2B-39B-b160k")
-        t5_dir = os.path.join(cst.HUGGINGFACE_CACHE_PATH, "models--google--t5-v1_1-xxl")
-        
-        # Now follow up with full snapshot download using local_dir
-        from huggingface_hub import snapshot_download
-        print("Downloading full snapshots...", flush=True)
-        download_with_retry(lambda: snapshot_download(repo_id="openai/clip-vit-large-patch14", local_dir=clip_dir, local_dir_use_symlinks=False))
-        download_with_retry(lambda: snapshot_download(repo_id="laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", local_dir=clip_big_dir, local_dir_use_symlinks=False))
-        
-        print("Downloading T5 component for Flux...", flush=True)
-        download_with_retry(lambda: snapshot_download(
-            repo_id="google/t5-v1_1-xxl",
-            repo_type="model",
-            local_dir=t5_dir,
-            local_dir_use_symlinks=False,
-            allow_patterns=["tokenizer_config.json", "spiece.model", "special_tokens_map.json", "config.json"],
-        ))
     else:
         dataset_path, _ = await download_text_dataset(args.task_id, args.dataset, args.file_format, dataset_dir)
         model_path = await download_axolotl_base_model(args.model, model_dir)

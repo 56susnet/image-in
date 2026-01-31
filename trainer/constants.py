@@ -30,8 +30,8 @@ CACHE_MODELS_DIR = "/cache/models"
 CACHE_DATASETS_DIR = "/cache/datasets"
 WANDB_LOGS_DIR = "/app/checkpoints/wandb_logs"
 IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH = "/workspace/core/config"
-IMAGE_CONTAINER_CONFIG_SAVE_PATH = "/tmp/configs"
-IMAGE_CONTAINER_IMAGES_PATH = "/tmp/images"
+IMAGE_CONTAINER_CONFIG_SAVE_PATH = "/dataset/configs"
+IMAGE_CONTAINER_IMAGES_PATH = "/dataset/images"
 
 TEXT_CONTAINER_SAVE_PATH = "/workspace/axolotl/outputs/"
 

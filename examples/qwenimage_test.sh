@@ -10,19 +10,18 @@ HUGGINGFACE_USERNAME=""
 HUGGINGFACE_TOKEN=""
 LOCAL_FOLDER="/app/checkpoints/$TASK_ID/$EXPECTED_REPO_NAME"
 
-CHECKPOINTS_DIR="$(pwd)/secure_checkpoints"; OUTPUTS_DIR="$(pwd)/outputs"
-mkdir -p "$CHECKPOINTS_DIR"; chmod 700 "$CHECKPOINTS_DIR"
-mkdir -p "$OUTPUTS_DIR"; chmod 700 "$OUTPUTS_DIR"
-
-mkdir -p "$CHECKPOINTS_DIR/tmp" "$CHECKPOINTS_DIR/hf_cache" "$CHECKPOINTS_DIR/models" "$CHECKPOINTS_DIR/datasets" "$CHECKPOINTS_DIR/images" "$CHECKPOINTS_DIR/configs"
+CHECKPOINTS_DIR="$(pwd)/secure_checkpoints"
+OUTPUTS_DIR="$(pwd)/outputs"
+mkdir -p "$CHECKPOINTS_DIR"
+chmod 700 "$CHECKPOINTS_DIR"
+mkdir -p "$OUTPUTS_DIR"
+chmod 700 "$OUTPUTS_DIR"
 
 echo "Downloading model and dataset..."
-docker run --rm --volume "$CHECKPOINTS_DIR:/cache:rw" --env TMPDIR=/cache/tmp --env HF_HOME=/cache/hf_cache --env TRANSFORMERS_CACHE=/cache/hf_cache --name downloader-image trainer-downloader --task-id "$TASK_ID" --model "$MODEL" --dataset "$DATASET_ZIP" --task-type "ImageTask" --model-type "$MODEL_TYPE" 
+docker run --rm   --volume "$CHECKPOINTS_DIR:/cache:rw"   --name downloader-image   trainer-downloader   --task-id "$TASK_ID"   --model "$MODEL"   --dataset "$DATASET_ZIP"   --task-type "ImageTask"   --model-type "$MODEL_TYPE" 
 
-SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 echo "Starting image training..."
-docker run --rm --gpus all   --security-opt=no-new-privileges   --cap-drop=ALL   --memory=32g   --cpus=8   --network none   --env TRANSFORMERS_CACHE=/cache/hf_cache   --volume "$CHECKPOINTS_DIR:/cache:rw"   --volume "$OUTPUTS_DIR:/app/checkpoints/:rw"   --volume "$SCRIPT_DIR/../scripts:/workspace/scripts:ro"   --volume "$SCRIPT_DIR/../scripts/core:/workspace/core:ro"   --name image-trainer-example   standalone-image-toolkit-trainer   --task-id "$TASK_ID"   --model "$MODEL"   --dataset-zip "$DATASET_ZIP"   --model-type "$MODEL_TYPE"   --expected-repo-name "$EXPECTED_REPO_NAME"   --hours-to-complete 1
-
+docker run --rm --gpus all   --security-opt=no-new-privileges   --cap-drop=ALL   --memory=32g   --cpus=8   --network none   --env TRANSFORMERS_CACHE=/cache/hf_cache   --volume "$CHECKPOINTS_DIR:/cache:rw"   --volume "$OUTPUTS_DIR:/app/checkpoints/:rw"   --name image-trainer-example   standalone-image-toolkit-trainer   --task-id "$TASK_ID"   --model "$MODEL"   --dataset-zip "$DATASET_ZIP"   --model-type "$MODEL_TYPE"   --expected-repo-name "$EXPECTED_REPO_NAME"   --hours-to-complete 1
 
 echo "Uploading model to HuggingFace..."
-docker run --rm --gpus all --volume "$CHECKPOINTS_DIR:/cache:rw" --volume "$OUTPUTS_DIR:/app/checkpoints/:rw" --env TMPDIR=/cache/tmp --env HF_HOME=/cache/hf_cache --env HUGGINGFACE_TOKEN="$HUGGINGFACE_TOKEN" --env HUGGINGFACE_USERNAME="$HUGGINGFACE_USERNAME" --env TASK_ID="$TASK_ID" --env EXPECTED_REPO_NAME="$EXPECTED_REPO_NAME" --env LOCAL_FOLDER="$LOCAL_FOLDER" --env HF_REPO_SUBFOLDER="checkpoints" --name hf-uploader hf-uploader
+docker run --rm --gpus all   --volume "$OUTPUTS_DIR:/app/checkpoints/:rw"   --env HUGGINGFACE_TOKEN="$HUGGINGFACE_TOKEN"   --env HUGGINGFACE_USERNAME="$HUGGINGFACE_USERNAME"   --env TASK_ID="$TASK_ID"   --env EXPECTED_REPO_NAME="$EXPECTED_REPO_NAME"   --env LOCAL_FOLDER="$LOCAL_FOLDER"   --env HF_REPO_SUBFOLDER="checkpoints"   --name hf-uploader   hf-uploader

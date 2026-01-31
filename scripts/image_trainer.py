@@ -30,8 +30,12 @@ from core.models.utility_models import ImageModelType
 
 # PHASE II - KUMPULAN ALAT DETEKTIF DAN PENGHITUNG OTOMATIS
 # CARI PATH MODEL
-def get_model_path(path: str) -> str:
+def get_model_path(path: str, model_type: str = "") -> str:
     if os.path.isdir(path):
+        # Khusus Flux: Jika ini adalah repo folder (ada vae/unet), return folder-nya saja
+        if model_type == "flux" and any(os.path.isdir(os.path.join(path, d)) for d in ["vae", "unet", "transformer", "text_encoder"]):
+            return path
+            
         files = [f for f in os.listdir(path) if f.endswith(".safetensors")]
         if files:
             # Ambil file safetensors dengan ukuran terbesar
@@ -484,59 +488,56 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
         config['output_dir'] = output_dir
 
         # TENTUKAN ALAMAT MODEL (BIAR KOHYA GAK NYASAR)
-        if model_type == "flux":
+        if model_type == \"flux\":
             # Cek apakah ada model pre-installed di /app/flux (Validator Mode)
-            # Pastikan directory tersebut berisi file, bukan cuma folder kosong/poisoned
             def is_valid_flux_resource(p):
                 if not os.path.exists(p): return False
-                if os.path.isfile(p): return p.endswith(".safetensors")
-                # If directory, check if it has any safetensors anywhere
+                if os.path.isfile(p): return p.endswith(\".safetensors\")
                 for root, _, files in os.walk(p):
-                    if any(f.endswith(".safetensors") for f in files): return True
+                    if any(f.endswith(\".safetensors\") for f in files): return True
                 return False
 
-            if is_valid_flux_resource("/app/flux/unet"):
-                print("[FLUX-ADAPT] Using working pre-installed /app/flux path", flush=True)
-                config["pretrained_model_name_or_path"] = "/app/flux/unet"
-                config["ae"] = "/app/flux/ae.safetensors"
-                config["clip_l"] = "/app/flux/clip_l.safetensors"
-                config["t5xxl"] = "/app/flux/t5xxl_fp16.safetensors"
+            if is_valid_flux_resource(\"/app/flux/unet\"):
+                print(\"[FLUX-ADAPT] Using working pre-installed /app/flux path\", flush=True)
+                config[\"pretrained_model_name_or_path\"] = \"/app/flux/unet\"
+                config[\"ae\"] = \"/app/flux/ae.safetensors\"
+                config[\"clip_l\"] = \"/app/flux/clip_l.safetensors\"
+                config[\"t5xxl\"] = \"/app/flux/t5xxl_fp16.safetensors\"
             else:
                 # Offline/Standalone Mode: Gunakan model_path hasil download
-                print(f"[FLUX-ADAPT] /app/flux not found or poisoned. Using downloaded model at {model_path}", flush=True)
+                print(f\"[FLUX-ADAPT] /app/flux not found or poisoned. Final model path: {model_path}\", flush=True)
                 
-                # Check structure: Is it a directory (Diffusers) or a single file?
-                model_dir = model_path if os.path.isdir(model_path) else os.path.dirname(model_path)
-                
-                # Kohya Flux Trainer prefers a single path if it's sharded diffusers
-                config["pretrained_model_name_or_path"] = model_path
-                
-                # Cek komponen di dalam folder download (Cari ae, clip, t5 secara cerdas)
-                def find_flux_component(name_pattern, preferred_subdir):
-                    # Priority 1: Preferred subdir (Diffusers style)
-                    preferred_path = os.path.join(model_dir, preferred_subdir)
-                    if os.path.exists(preferred_path):
-                        for root, _, files in os.walk(preferred_path):
-                            for f in files:
-                                if f.endswith(".safetensors"): return os.path.join(root, f)
-                    
-                    # Priority 2: Anywhere in model_dir
-                    for root, _, files in os.walk(model_dir):
-                        if preferred_subdir in root: continue # Already checked
-                        for f in files:
-                            if name_pattern.lower() in f.lower() and f.endswith(".safetensors"):
-                                return os.path.join(root, f)
-                    return None
+                # Jika model_path adalah directory (Diffusers), biarkan Kohya handle otomatis
+                if os.path.isdir(model_path):
+                    print(\"[FLUX-ADAPT] Full Repo Folder detected. Letting Kohya handle components.\", flush=True)
+                    config[\"pretrained_model_name_or_path\"] = model_path
+                    # Hapus manual override agar tidak tabrakan dengan internal loader Kohya
+                    for k in [\"ae\", \"clip_l\", \"t5xxl\"]: 
+                        if k in config: del config[k]
+                else:
+                    config[\"pretrained_model_name_or_path\"] = model_path
+                    # Single File Mode: Cari komponen pelengkap di folder yang sama
+                    model_dir = os.path.dirname(model_path)
+                    def find_flux_component(name_pattern, preferred_subdir):
+                        pref = os.path.join(model_dir, preferred_subdir)
+                        if os.path.isdir(pref):
+                            for r, _, fs in os.walk(pref):
+                                for f in fs:
+                                    if f.endswith(\".safetensors\"): return os.path.join(r, f)
+                        for r, _, fs in os.walk(model_dir):
+                            for f in fs:
+                                if name_pattern.lower() in f.lower() and f.endswith(\".safetensors\"):
+                                    return os.path.join(r, f)
+                        return None
 
-                flux_ae = find_flux_component("ae", "vae")
-                flux_clip = find_flux_component("clip_l", "text_encoder")
-                flux_t5 = find_flux_component("t5xxl", "text_encoder_2")
-
-                if flux_ae: config["ae"] = flux_ae
-                if flux_clip: config["clip_l"] = flux_clip
-                if flux_t5: config["t5xxl"] = flux_t5
+                    flux_ae = find_flux_component(\"ae\", \"vae\")
+                    flux_clip = find_flux_component(\"clip_l\", \"text_encoder\")
+                    flux_t5 = find_flux_component(\"t5xxl\", \"text_encoder_2\")
+                    if flux_ae: config[\"ae\"] = flux_ae
+                    if flux_clip: config[\"clip_l\"] = flux_clip
+                    if flux_t5: config[\"t5xxl\"] = flux_t5
         else:
-            config["pretrained_model_name_or_path"] = model_path
+            config[\"pretrained_model_name_or_path\"] = model_path
 
         # Suntik Bumbu SDXL Bos (DIM, ALPHA, & ARGS)
         config["network_dim"] = model_params.get("network_dim", 32)
@@ -688,8 +689,8 @@ async def main():
     os.makedirs(train_cst.IMAGE_CONTAINER_IMAGES_PATH, exist_ok=True)
     os.makedirs(train_cst.HUGGINGFACE_CACHE_PATH, exist_ok=True)
 
-    model_path = get_model_path(train_paths.get_image_base_model_path(args.model))
-    print("Preparing dataset...", flush=True)
+    model_path = get_model_path(train_paths.get_image_base_model_path(args.model), model_type=args.model_type)
+    print(\"Preparing dataset...\", flush=True)
 
     prepare_dataset(
         training_images_zip_path=train_paths.get_image_training_zip_save_path(args.task_id),

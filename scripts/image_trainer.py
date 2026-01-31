@@ -527,45 +527,43 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
     else:
         with open(config_template_path, "r") as file:
             config = toml.load(file)
-        config['pretrained_model_name_or_path'] = model_path
-        
         # [RESTORATION] FLUX Asset Discovery Logic
         if model_type == "flux":
-            print(f"DEBUG: Flux Brute-Force Radar - Scanning {model_path}...", flush=True)
+            print(f"DEBUG: Flux Guardian - Validating weights in {model_path}...", flush=True)
             
-            all_paths = []
+            # Step 1: Scan for valid weights
+            valid_weights = False
             for root, dirs, files in os.walk(model_path):
-                for f in files: all_paths.append(os.path.join(root, f))
+                if any(f.endswith((".safetensors", ".index.json")) for f in files):
+                    valid_weights = True
+                    break
             
-            # Print sample files to stop the guesswork
-            print(f"DEBUG: Found {len(all_paths)} files. Sample: {all_paths[:5]}", flush=True)
-
-            # 1. PENCARIAN TRANSFORMER (Cari file bobot atau index)
-            found_t = None
-            # Prioritas: Index -> shard 1 -> transformer file
-            for pattern in [".index.json", "-00001-of-", "transformer.safetensors", "diffusion_pytorch_model.safetensors"]:
-                for p in all_paths:
-                    if pattern in p:
-                        found_t = p
-                        break
-                if found_t: break
-            
-            if found_t:
-                config['pretrained_model_name_or_path'] = found_t
-                print(f"DEBUG: [CORE] Transformer located at -> {found_t}", flush=True)
+            if not valid_weights:
+                print(f"DEBUG: [WARNING] No valid training weights found in {model_path}. FALLBACK to TOML defaults.", flush=True)
+                # We do NOT overwrite pretrained_model_name_or_path, keeping the default from TOML
             else:
-                print(f"DEBUG: [WARNING] No transformer found, using root fallback.", flush=True)
+                # ONLY if valid weights exist, do we try to point specifically to them
+                config['pretrained_model_name_or_path'] = model_path
+                all_paths = []
+                for root, dirs, files in os.walk(model_path):
+                    for f in files: all_paths.append(os.path.join(root, f))
 
-            # 2. PENCARIAN KOMPONEN (T5, CLIP, VAE)
-            for p in all_paths:
-                if "t5xxl" in p.lower() and (p.endswith(".safetensors") or p.endswith(".bin")):
-                    config['t5xxl'] = p
-                if "clip_l" in p.lower() and (p.endswith(".safetensors") or p.endswith(".bin")):
-                    config['clip_l'] = p
-                if ("vae" in p.lower() or "/ae/" in p.lower()) and (p.endswith(".safetensors") or p.endswith(".bin")):
-                    config['ae'] = p
+                # Find Transformer Specifics
+                for pattern in [".index.json", "transformer.safetensors", "diffusion_pytorch_model.safetensors"]:
+                    for p in all_paths:
+                        if pattern in p:
+                            config['pretrained_model_name_or_path'] = p
+                            print(f"DEBUG: [FOUND] Transformer -> {p}", flush=True)
+                            break
+                    if config['pretrained_model_name_or_path'] != model_path: break
 
-            print(f"DEBUG: Discovery Complete. T5: {config.get('t5xxl')}, CLIP: {config.get('clip_l')}, AE: {config.get('ae')}", flush=True)
+                # Find Components
+                for p in all_paths:
+                    if "t5xxl" in p.lower() and p.endswith(".safetensors"): config['t5xxl'] = p
+                    if "clip_l" in p.lower() and p.endswith(".safetensors"): config['clip_l'] = p
+                    if ("vae" in p.lower() or "/ae/" in p.lower()) and p.endswith(".safetensors"): config['ae'] = p
+
+            print(f"DEBUG: Final Flux Base -> {config.get('pretrained_model_name_or_path')}", flush=True)
 
         config['train_data_dir'] = train_data_dir
         if not os.path.exists(output_dir): os.makedirs(output_dir, exist_ok=True)

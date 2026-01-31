@@ -25,16 +25,19 @@ def get_image_training_images_dir(task_id: str) -> str:
 def get_image_training_config_template_path(model_type: str, train_data_dir: str) -> tuple[str, bool]:
     model_type = model_type.lower()
     if model_type == ImageModelType.SDXL.value:
-        prompts_path = os.path.join(train_data_dir, f"{cst.DIFFUSION_SDXL_REPEATS}_lora style")
+        # We manually detect style by looking at the folder structure or prompts
+        # image-yaya/Champion often uses hardcoded folder names like '5_lora style'
+        # We'll use a generic approach to find the prompts
         prompts = []
-        for file in os.listdir(prompts_path):
-            if file.endswith(".txt"):
-                with open(os.path.join(prompts_path, file), "r") as f:
-                    prompt = f.read().strip()
-                    prompts.append(prompt)
-
+        # Search for any .txt file in the train_data_dir to detect style
+        for root, dirs, files in os.walk(train_data_dir):
+            for file in files:
+                if file.endswith(".txt"):
+                    with open(os.path.join(root, file), "r") as f:
+                        prompts.append(f.read().strip())
+        
         styles = detect_styles_in_prompts(prompts)
-        print(f"Styles: {styles}")
+        print(f"Styles detected: {styles}")
 
         if styles:
             return str(Path(train_cst.IMAGE_CONTAINER_CONFIG_TEMPLATE_PATH) / "base_diffusion_sdxl_style.toml"), True

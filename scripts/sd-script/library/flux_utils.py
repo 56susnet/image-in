@@ -196,6 +196,35 @@ def load_flow_model(
         raise ValueError(f"Unsupported model_type: {model_type}. Supported types are 'flux' and 'chroma'.")
 
 
+def convert_diffusers_vae_to_bfl(sd: dict) -> dict:
+    """Maps Diffusers VAE keys to BFL AutoEncoder format."""
+    new_sd = {}
+    for k, v in sd.items():
+        nk = k
+        # Mapping encoder/decoder blocks
+        if "down_blocks." in k:
+            # Example: encoder.down_blocks.0.resnets.0 -> encoder.down.0.block.0
+            nk = nk.replace("down_blocks.", "down.")
+            nk = nk.replace("resnets.", "block.")
+        if "up_blocks." in k:
+            nk = nk.replace("up_blocks.", "up.")
+            nk = nk.replace("resnets.", "block.")
+        if "mid_block." in k:
+            nk = nk.replace("mid_block.", "mid.")
+        
+        # Mapping samplers
+        if "downsamplers.0." in k: nk = nk.replace("downsamplers.0.", "downsample.")
+        if "upsamplers.0." in k: nk = nk.replace("upsamplers.0.", "upsample.")
+        
+        # Mapping layers
+        nk = nk.replace("conv1.", "conv1.") # matches
+        nk = nk.replace("conv2.", "conv2.") # matches
+        nk = nk.replace("norm1.", "norm1.") # matches
+        nk = nk.replace("norm2.", "norm2.") # matches
+        
+        new_sd[nk] = v
+    return new_sd
+
 def generic_load_safetensors(path: str, device: str, disable_mmap: bool, dtype: torch.dtype) -> dict:
     import re
     if os.path.isdir(path):
@@ -226,6 +255,12 @@ def load_ae(
 
     logger.info(f"Loading state dict from {ckpt_path}")
     sd = generic_load_safetensors(ckpt_path, device=str(device), disable_mmap=disable_mmap, dtype=dtype)
+    
+    # Attempt to detect if it's a Diffusers VAE and needs conversion
+    if any(k.startswith("encoder.conv_in") for k in sd.keys()):
+        logger.info("Detected Diffusers VAE, attempting conversion...")
+        sd = convert_diffusers_vae_to_bfl(sd)
+
     info = ae.load_state_dict(sd, strict=False, assign=True)
     logger.info(f"Loaded AE: {info}")
     return ae
@@ -443,6 +478,11 @@ def load_t5xxl(
     else:
         logger.info(f"Loading state dict from {ckpt_path}")
         sd = generic_load_safetensors(ckpt_path, device=str(device), disable_mmap=disable_mmap, dtype=dtype)
+    
+    # Fix for T5 Diffusers: shared.weight -> encoder.embed_tokens.weight
+    if "shared.weight" in sd and "encoder.embed_tokens.weight" not in sd:
+        sd["encoder.embed_tokens.weight"] = sd["shared.weight"]
+    
     info = t5xxl.load_state_dict(sd, strict=False, assign=True)
     logger.info(f"Loaded T5xxl: {info}")
     return t5xxl

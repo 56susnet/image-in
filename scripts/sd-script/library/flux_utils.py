@@ -237,6 +237,10 @@ def convert_diffusers_vae_to_bfl(sd: dict) -> dict:
             # Map specific attention keys
             nk = nk.replace("to_q.", "q.").replace("to_k.", "k.").replace("to_v.", "v.")
             nk = nk.replace("to_out.0.", "proj_out.").replace("group_norm.", "norm.")
+            
+            # DIMENSION FIX: Reshape 2D weights to 4D for BFL Conv2d
+            if "weight" in nk and len(v.shape) == 2:
+                v = v.view(v.shape[0], v.shape[1], 1, 1)
         
         nk = nk.replace("conv1.", "conv1.") # matches
         nk = nk.replace("conv2.", "conv2.") # matches

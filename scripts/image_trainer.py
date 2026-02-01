@@ -460,10 +460,15 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                         elif key in ["optimizer_type", "optimizer"]: process['train']['optimizer'] = value
                         elif key in ["max_train_epochs", "steps"]:
                             process['train']['steps'] = calculate_steps(value) if key == "max_train_epochs" else value
-                        elif key in ["rank", "alpha"]:
+                        elif key in ["rank", "alpha", "network_dim", "network_alpha", "conv", "conv_alpha", "conv_rank", "conv_dim"]:
                             if 'network' not in process: process['network'] = {}
-                            if key == "rank": process['network']['linear'] = value
-                            elif key == "alpha": process['network']['linear_alpha'] = value
+                            if key in ["rank", "network_dim"]: process['network']['linear'] = value
+                            elif key in ["alpha", "network_alpha"]: process['network']['linear_alpha'] = value
+                            elif key in ["conv", "conv_rank", "conv_dim"]: process['network']['conv'] = value
+                            elif key == "conv_alpha": process['network']['conv_alpha'] = value
+                        elif key in ["quantize", "qtype", "assistant_lora_path"]:
+                            if 'model' not in process: process['model'] = {}
+                            process['model'][key] = value
                         elif key == "optimizer_args" and isinstance(value, list):
                             opt_params = {}
                             for item in value:
@@ -472,6 +477,11 @@ def create_config(task_id, model_path, model_name, model_type, expected_repo_nam
                                     opt_params[k.strip()] = v
                             process['train']['optimizer_params'] = opt_params
                         else: process['train'][key] = value
+
+                # Apply default model params if not overridden by LRS
+                if 'network' not in process: process['network'] = {}
+                if 'linear' not in process['network']: process['network']['linear'] = model_params.get("network_dim", 64)
+                if 'linear_alpha' not in process['network']: process['network']['linear_alpha'] = model_params.get("network_alpha", 64)
 
                 if trigger_word:
                     process['trigger_word'] = trigger_word

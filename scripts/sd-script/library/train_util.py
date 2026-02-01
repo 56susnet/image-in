@@ -4845,7 +4845,10 @@ def get_optimizer(args, trainable_params) -> tuple[str, str, object]:
             #     value = tuple(value)
 
             optimizer_kwargs[key] = value
-    # logger.info(f"optkwargs {optimizer}_{kwargs}")
+    
+    # Lion optimizers do not support 'eps'
+    if "lion" in optimizer_type.lower():
+        optimizer_kwargs.pop("eps", None)
 
     lr = args.learning_rate
     optimizer = None

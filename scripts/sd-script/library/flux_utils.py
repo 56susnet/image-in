@@ -225,7 +225,19 @@ def convert_diffusers_vae_to_bfl(sd: dict) -> dict:
         if "downsamplers.0." in k: nk = nk.replace("downsamplers.0.", "downsample.")
         if "upsamplers.0." in k: nk = nk.replace("upsamplers.0.", "upsample.")
         
-        # Mapping layers
+        # Mapping layers & terminology
+        nk = nk.replace("conv_shortcut.", "nin_shortcut.")
+        nk = nk.replace("conv_norm_out.", "norm_out.")
+        
+        # Mid block specific mapping
+        if "mid.resnets.0." in nk: nk = nk.replace("mid.resnets.0.", "mid.block_1.")
+        if "mid.resnets.1." in nk: nk = nk.replace("mid.resnets.1.", "mid.block_2.")
+        if "mid.attentions.0." in nk: 
+            nk = nk.replace("mid.attentions.0.", "mid.attn_1.")
+            # Map specific attention keys
+            nk = nk.replace("to_q.", "q.").replace("to_k.", "k.").replace("to_v.", "v.")
+            nk = nk.replace("to_out.0.", "proj_out.").replace("group_norm.", "norm.")
+        
         nk = nk.replace("conv1.", "conv1.") # matches
         nk = nk.replace("conv2.", "conv2.") # matches
         nk = nk.replace("norm1.", "norm1.") # matches

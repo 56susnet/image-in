@@ -13,8 +13,8 @@ config:
       conv_alpha: 32
     save:
       dtype: bf16
-      save_every: 500
-      max_step_saves_to_keep: 2
+      save_every: 250
+      max_step_saves_to_keep: 4
       save_format: diffusers
     datasets:
     - folder_path: /dataset/images
@@ -25,8 +25,6 @@ config:
     train:
       batch_size: 1
       steps: 2000
-      do_cfg: true
-      cfg_scale: 1.0
       lr: 0.0001
       optimizer: adamw8bit
       gradient_checkpointing: true
@@ -46,7 +44,6 @@ config:
       quantize_te: true
       qtype_te: qfloat8
       assistant_lora_path: /cache/hf_cache/zimage_turbo_training_adapter_v2.safetensors
-      low_vram: false
 meta:
   name: zimage_lora
   version: '1.0'

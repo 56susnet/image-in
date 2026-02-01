@@ -43,16 +43,39 @@ def analyze_checkpoint_state(ckpt_path: str) -> Tuple[bool, bool, Tuple[int, int
     # check the state dict: Diffusers or BFL, dev or schnell, number of blocks
     logger.info(f"Checking the state dict: Diffusers or BFL, dev or schnell")
 
+    import re
     if os.path.isdir(ckpt_path):  # if ckpt_path is a directory, it is Diffusers
-        ckpt_path = os.path.join(ckpt_path, "transformer", "diffusion_pytorch_model-00001-of-00003.safetensors")
-    if "00001-of-00003" in ckpt_path:
-        ckpt_paths = [ckpt_path.replace("00001-of-00003", f"0000{i}-of-00003") for i in range(1, 4)]
+        # Check for transformer folder first
+        found = False
+        for sub in ["transformer", "unet"]:
+            sub_path = os.path.join(ckpt_path, sub)
+            if os.path.isdir(sub_path):
+                for f in os.listdir(sub_path):
+                    if f.endswith(".safetensors"):
+                        ckpt_path = os.path.join(sub_path, f)
+                        found = True
+                        break
+            if found: break
+        
+        if not found:
+            for f in os.listdir(ckpt_path):
+                if f.endswith(".safetensors"):
+                    ckpt_path = os.path.join(ckpt_path, f)
+                    break
+    
+    # Generic shard detection
+    match = re.search(r"(\d+)-of-(\d+)", ckpt_path)
+    if match:
+        total = int(match.group(2))
+        prefix = ckpt_path[:match.start(1)]
+        suffix = ckpt_path[match.end(2):]
+        ckpt_paths = [f"{prefix}{str(i).zfill(len(match.group(1)))}-of-{str(total).zfill(len(match.group(2)))}{suffix}" for i in range(1, total + 1)]
     else:
         ckpt_paths = [ckpt_path]
 
     keys = []
-    for ckpt_path in ckpt_paths:
-        with safe_open(ckpt_path, framework="pt") as f:
+    for p in ckpt_paths:
+        with safe_open(p, framework="pt") as f:
             keys.extend(f.keys())
 
     # if the key has annoying prefix, remove it
@@ -173,6 +196,26 @@ def load_flow_model(
         raise ValueError(f"Unsupported model_type: {model_type}. Supported types are 'flux' and 'chroma'.")
 
 
+def generic_load_safetensors(path: str, device: str, disable_mmap: bool, dtype: torch.dtype) -> dict:
+    import re
+    if os.path.isdir(path):
+        paths = [os.path.join(path, f) for f in os.listdir(path) if f.endswith(".safetensors")]
+        paths.sort()
+    else:
+        match = re.search(r"(\d+)-of-(\d+)", path)
+        if match:
+            total = int(match.group(2))
+            prefix = path[:match.start(1)]
+            suffix = path[match.end(2):]
+            paths = [f"{prefix}{str(i).zfill(len(match.group(1)))}-of-{str(total).zfill(len(match.group(2)))}{suffix}" for i in range(1, total + 1)]
+        else:
+            paths = [path]
+    
+    sd = {}
+    for p in paths:
+        sd.update(load_safetensors(p, device=device, disable_mmap=disable_mmap, dtype=dtype))
+    return sd
+
 def load_ae(
     ckpt_path: str, dtype: torch.dtype, device: Union[str, torch.device], disable_mmap: bool = False
 ) -> flux_models.AutoEncoder:
@@ -182,7 +225,7 @@ def load_ae(
         ae = flux_models.AutoEncoder(flux_models.configs[MODEL_NAME_DEV].ae_params).to(dtype)
 
     logger.info(f"Loading state dict from {ckpt_path}")
-    sd = load_safetensors(ckpt_path, device=str(device), disable_mmap=disable_mmap, dtype=dtype)
+    sd = generic_load_safetensors(ckpt_path, device=str(device), disable_mmap=disable_mmap, dtype=dtype)
     info = ae.load_state_dict(sd, strict=False, assign=True)
     logger.info(f"Loaded AE: {info}")
     return ae
@@ -344,7 +387,7 @@ def load_clip_l(
         sd = state_dict
     else:
         logger.info(f"Loading state dict from {ckpt_path}")
-        sd = load_safetensors(ckpt_path, device=str(device), disable_mmap=disable_mmap, dtype=dtype)
+        sd = generic_load_safetensors(ckpt_path, device=str(device), disable_mmap=disable_mmap, dtype=dtype)
     info = clip.load_state_dict(sd, strict=False, assign=True)
     logger.info(f"Loaded CLIP-L: {info}")
     return clip
@@ -399,7 +442,7 @@ def load_t5xxl(
         sd = state_dict
     else:
         logger.info(f"Loading state dict from {ckpt_path}")
-        sd = load_safetensors(ckpt_path, device=str(device), disable_mmap=disable_mmap, dtype=dtype)
+        sd = generic_load_safetensors(ckpt_path, device=str(device), disable_mmap=disable_mmap, dtype=dtype)
     info = t5xxl.load_state_dict(sd, strict=False, assign=True)
     logger.info(f"Loaded T5xxl: {info}")
     return t5xxl

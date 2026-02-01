@@ -1,80 +1,46 @@
 ﻿{
-    "default": {},
+    "default": {
+        "conv_rank": 64,
+        "conv_alpha": 64
+    },
     "data": {
         "gradients-io-tournaments/Qwen-Image": {
             "model_name": "Qwen2-VL-7B-Instruct",
             "small": {
                 "lr": 1.5e-4,
-                "alpha": 64,
-                "conv_rank": 64,
-                "conv_alpha": 32,
-                "do_cfg": true,
-                "cfg_scale": 4.0,
+                "cfg_scale": 7.5,
                 "optimizer_params": {
-                    "weight_decay": 1e-2
+                    "weight_decay": 0.01
                 }
             },
             "medium": {
-                "lr": 1.25e-4,
-                "conv_rank": 64,
-                "conv_alpha": 64,
-                "do_cfg": true,
-                "cfg_scale": 3.8,
-                "optimizer_params": {
-                    "weight_decay": 1e-3
-                }
+                "lr": 1.0e-4
             },
             "large": {
-                "conv_rank": 64,
-                "conv_alpha": 64,
-                "do_cfg": true,
-                "cfg_scale": 3.5,
+                "lr": 8e-5,
+                "cfg_scale": 5.5,
                 "optimizer_params": {
-                    "weight_decay": 1e-4
+                    "weight_decay": 1e-05
                 }
             }
         },
         "gradients-io-tournaments/Qwen-Image-Jib-Mix": {
             "model_name": "Qwen2-VL-7B-Instruct-Jib",
             "small": {
-                "lr": 1.5e-4,
-                "rank": 64,
-                "alpha": 32,
-                "do_cfg": true,
-                "cfg_scale": 4.0,
+                "lr": 1.2e-4,
+                "cfg_scale": 7.0,
                 "optimizer_params": {
-                    "weight_decay": 1e-2
-                },
-                "ema_config": {
-                    "use_ema": true,
-                    "ema_decay": 0.995
+                    "weight_decay": 0.01
                 }
             },
             "medium": {
-                "lr": 1.25e-4,
-                "rank": 64,
-                "alpha": 64,
-                "do_cfg": true,
-                "cfg_scale": 3.8,
-                "optimizer_params": {
-                    "weight_decay": 1e-3
-                },
-                "ema_config": {
-                    "use_ema": true,
-                    "ema_decay": 0.995
-                }
+                "lr": 8e-5
             },
             "large": {
-                "rank": 64,
-                "alpha": 64,
-                "do_cfg": true,
-                "cfg_scale": 3.5,
+                "lr": 6e-5,
+                "cfg_scale": 5.0,
                 "optimizer_params": {
-                    "weight_decay": 1e-4
-                },
-                "ema_config": {
-                    "use_ema": true,
-                    "ema_decay": 0.995
+                    "weight_decay": 1e-05
                 }
             }
         }

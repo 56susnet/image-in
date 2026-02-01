@@ -5,7 +5,7 @@
             "max": 20,
             "name": "small",
             "config": {
-                "max_train_steps": 220
+                "max_train_steps": 250
             }
         },
         {
@@ -13,12 +13,12 @@
             "max": 40,
             "name": "medium",
             "config": {
-                "max_train_steps": 240
+                "max_train_steps": 250
             }
         },
         {
             "min": 41,
-            "max": 1000,
+            "max": 60,
             "name": "large",
             "config": {
                 "max_train_steps": 250
@@ -26,6 +26,6 @@
         }
     ],
     "default": {
-        "max_train_steps": 240
+        "max_train_steps": 250
     }
 }

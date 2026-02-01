@@ -3,45 +3,59 @@
         "optimizer_type": "Lion",
         "optimizer_args": [
             "betas=0.9,0.99",
-            "weight_decay=0.01",
-            "eps=1e-8"
+            "weight_decay=0.01"
         ],
         "network_dim": 128,
         "network_alpha": 128,
-        "unet_lr": 3e-5
+        "unet_lr": 5e-5,
+        "text_encoder_lr": [
+            8e-6,
+            8e-6
+        ],
+        "loss_type": "huber",
+        "huber_c": 0.1,
+        "guidance_scale": 90.0
     },
     "data": {
-        "00f8fa962a24d797b9a09be9886ec37bfaf613c98a420d303d220040f65b3eed": {
-            "model_name": "dataautogpt3/FLUX-MonochromeManga",
+        "a6d3e66c487e7e7fa7ce6b5b1753a39efe2c0d2eca5a9e4752703227dd408b69": {
+            "model_name": "rayonlabs/FLUX.1-dev",
             "small": {
-                "unet_lr": 3e-5
+                "unet_lr": 7e-5,
+                "text_encoder_lr": [
+                    1e-5,
+                    1e-5
+                ]
             },
             "medium": {
-                "unet_lr": 3e-5
+                "unet_lr": 5e-5
             },
             "large": {
-                "unet_lr": 3e-5
+                "unet_lr": 4e-5,
+                "text_encoder_lr": [
+                    7e-6,
+                    7e-6
+                ]
             }
         },
         "47173b2141dd5aa99d2c1de9208b092e81905789d238a29d092f007e75726ce3": {
             "model_name": "mikeyandfriends/PixelWave_FLUX.1-dev_03",
             "small": {
-                "unet_lr": 3e-5
+                "unet_lr": 7e-5
             },
             "medium": {
-                "unet_lr": 3e-5
+                "unet_lr": 5e-5
             },
             "large": {
-                "unet_lr": 3e-5
+                "unet_lr": 4e-5
             }
         },
-        "a6d3e66c487e7e7fa7ce6b5b1753a39efe2c0d2eca5a9e4752703227dd408b69": {
-            "model_name": "rayonlabs/FLUX.1-dev",
+        "00f8fa962a24d797b9a09be9886ec37bfaf613c98a420d303d220040f65b3eed": {
+            "model_name": "dataautogpt3/FLUX-MonochromeManga",
             "small": {
-                "unet_lr": 3e-5
+                "unet_lr": 5.5e-5
             },
             "medium": {
-                "unet_lr": 3e-5
+                "unet_lr": 4e-5
             },
             "large": {
                 "unet_lr": 3e-5
@@ -50,13 +64,13 @@
         "6445f395eb2cbcb40cec7bda29dd19c6ee0beb4660ee5fbc2556ed35920cd6b2": {
             "model_name": "mhnakif/fluxunchained-dev",
             "small": {
-                "unet_lr": 3e-5
+                "unet_lr": 7e-5
             },
             "medium": {
-                "unet_lr": 3e-5
+                "unet_lr": 5e-5
             },
             "large": {
-                "unet_lr": 3e-5
+                "unet_lr": 4e-5
             }
         }
     }

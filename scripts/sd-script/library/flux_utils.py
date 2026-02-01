@@ -207,8 +207,17 @@ def convert_diffusers_vae_to_bfl(sd: dict) -> dict:
             nk = nk.replace("down_blocks.", "down.")
             nk = nk.replace("resnets.", "block.")
         if "up_blocks." in k:
-            nk = nk.replace("up_blocks.", "up.")
+            # Flux VAE Decoder Reverse Indexing: 0->3, 1->2, 2->1, 3->0
+            import re
+            match = re.search(r"up_blocks\.(\d+)", nk)
+            if match:
+                idx = int(match.group(1))
+                new_idx = 3 - idx
+                nk = nk.replace(f"up_blocks.{idx}", f"up.{new_idx}")
+            
             nk = nk.replace("resnets.", "block.")
+            nk = nk.replace("upsamplers.0.", "upsample.")
+        
         if "mid_block." in k:
             nk = nk.replace("mid_block.", "mid.")
         
